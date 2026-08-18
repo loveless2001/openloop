@@ -361,10 +361,54 @@ input {
   pointer-events: none;
 }
 
+.completion-widget {
+  position: relative;
+}
+
 .completion-ghost {
   color: #9b958b;
   pointer-events: none;
   white-space: pre-wrap;
+}
+
+.completion-controls {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 7px);
+  left: 4px;
+  display: inline-flex;
+  gap: 4px;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid #d8d1c5;
+  border-radius: 7px;
+  background: #fffdf8;
+  box-shadow: 0 7px 18px rgb(51 44 35 / 14%);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.completion-action {
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 4px;
+  color: #6b645b;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.completion-action:hover,
+.completion-action:focus-visible {
+  color: #173c32;
+  background: #edf4f0;
+  outline: none;
+}
+
+.completion-action.reject:hover,
+.completion-action.reject:focus-visible {
+  color: #7c3d34;
+  background: #f9e9e6;
 }
 
 .issue-panel {

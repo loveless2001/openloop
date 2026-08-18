@@ -15,6 +15,7 @@ import type { Database } from "../db/client.js";
 import { getDocument } from "../documents.js";
 import { createCompletionModelRun, finishModelRun } from "../model-runs.js";
 import type { SelectedModelAdapters } from "../models/provider.js";
+import type { TrainingTraceWriter } from "../training-traces.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -28,6 +29,7 @@ export function registerCompletionRoutes(
   server: FastifyInstance,
   database: Database,
   selectedModel: SelectedModelAdapters,
+  trainingTraceWriter: TrainingTraceWriter,
 ): void {
   server.post("/v1/completions/stream", async (request, reply) => {
     const input = CompletionStreamRequestSchema.parse(request.body);
@@ -59,6 +61,9 @@ export function registerCompletionRoutes(
       inputHash,
     });
     const startedAt = performance.now();
+    let generatedSuggestion = "";
+    let traceStatus: "completed" | "aborted" | "error" = "error";
+    let traceErrorCode: string | undefined;
     const controller = new AbortController();
     const abort = () => controller.abort();
     request.raw.once("aborted", abort);
@@ -92,8 +97,12 @@ export function registerCompletionRoutes(
           },
           controller.signal,
         )) {
-          if (chunk.textDelta) yield sse("delta", { text: chunk.textDelta });
+          if (chunk.textDelta) {
+            generatedSuggestion += chunk.textDelta;
+            yield sse("delta", { text: chunk.textDelta });
+          }
           if (chunk.done) {
+            traceStatus = "completed";
             yield sse("done", { requestId: input.requestId });
             break;
           }
@@ -123,6 +132,8 @@ export function registerCompletionRoutes(
                 },
               );
         const latencyMs = Math.round(performance.now() - startedAt);
+        traceStatus = modelError.code === "MODEL_ABORTED" ? "aborted" : "error";
+        traceErrorCode = modelError.code;
         finishModelRun(database, {
           id: runId,
           status: modelError.code === "MODEL_ABORTED" ? "aborted" : "error",
@@ -135,6 +146,25 @@ export function registerCompletionRoutes(
         });
       } finally {
         request.raw.removeListener("aborted", abort);
+        try {
+          await trainingTraceWriter.recordCandidate({
+            requestId: input.requestId,
+            provider: selectedModel.completion.adapter.providerId,
+            model: selectedModel.completion.model,
+            documentTitle: document.title,
+            prefix: input.prefix,
+            suffix: input.suffix,
+            headingPath: input.headingPath,
+            suggestion: generatedSuggestion,
+            status: traceStatus,
+            ...(traceErrorCode ? { errorCode: traceErrorCode } : {}),
+          });
+        } catch (error) {
+          request.log.error(
+            { err: error, requestId: input.requestId },
+            "Could not capture completion candidate training trace",
+          );
+        }
       }
     }
 
@@ -152,6 +182,14 @@ export function registerCompletionRoutes(
       { completionEvent: event },
       "Completion interaction recorded",
     );
+    try {
+      await trainingTraceWriter.recordFeedback(event);
+    } catch (error) {
+      request.log.error(
+        { err: error, requestId: event.requestId },
+        "Could not capture completion feedback training trace",
+      );
+    }
     return reply.code(202).send({ accepted: true });
   });
 }

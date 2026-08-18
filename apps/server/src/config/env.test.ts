@@ -10,6 +10,17 @@ describe("model environment", () => {
     expect(environment.COMPLETION_MODEL).toBe("qwen2.5:0.5b");
     expect(environment.COMPLETION_KEEP_ALIVE).toBe("30m");
     expect(environment.CRITIC_PROVIDER).toBe("mock");
+    expect(environment.CAPTURE_TRAINING_TRACES).toBe(false);
+  });
+
+  it("requires an explicit opt-in for raw local training traces", () => {
+    const environment = readEnvironment({
+      CAPTURE_TRAINING_TRACES: "true",
+      TRAINING_TRACE_PATH: "data/training/custom.jsonl",
+    });
+
+    expect(environment.CAPTURE_TRAINING_TRACES).toBe(true);
+    expect(environment.TRAINING_TRACE_PATH).toBe("data/training/custom.jsonl");
   });
 
   it("accepts an independently configured remote critic", () => {

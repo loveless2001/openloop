@@ -44,6 +44,11 @@ keystroke context off-machine. The dedicated Ollama adapter owns low-latency com
 residency, while the compatible critic adapter owns request formatting, timeouts, JSON-schema
 handling, and one repair attempt for malformed structured outputs.
 
+Optional training capture sits behind `CAPTURE_TRAINING_TRACES`. When disabled, completion events
+remain metadata-only. When explicitly enabled, the server appends raw candidate context and
+interaction outcomes to local JSONL as separate request-ID-linked records. Trace I/O is serialized,
+flushed during shutdown, and never changes completion delivery when capture fails.
+
 For a local Ollama endpoint, server readiness includes the model runtime. Startup reuses an
 existing Ollama server or launches `ollama serve`, verifies that the configured completion model is
 installed, and completes a no-output warm-up before Fastify begins listening. The server records

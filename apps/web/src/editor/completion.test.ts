@@ -122,6 +122,42 @@ describe("completion decoration", () => {
     expect(editor.getText()).toBe("abcx");
     editor.destroy();
   });
+
+  it("renders every streamed delta and exposes clickable actions", () => {
+    const onAcceptFull = vi.fn();
+    const onDismiss = vi.fn();
+    const editor = editorWithCompletion({ onAcceptFull, onDismiss });
+    editor.commands.setTextSelection(4);
+    const completion = {
+      requestId: "c4763dfd-c791-4dfb-998f-fbfdee15704a",
+      from: 4,
+      text: " first",
+    };
+    setCompletionDecoration(editor.view, completion);
+    setCompletionDecoration(editor.view, {
+      ...completion,
+      text: " first complete sentence",
+    });
+
+    expect(
+      editor.view.dom.querySelector(".completion-ghost")?.textContent,
+    ).toBe(" first complete sentence");
+    expect(
+      editor.view.dom.querySelector<HTMLButtonElement>(
+        '[aria-label="Accept suggestion (Tab)"]',
+      )?.title,
+    ).toBe("Accept suggestion (Tab)");
+    editor.view.dom
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Reject suggestion (Escape)"]',
+      )
+      ?.click();
+
+    expect(onDismiss).toHaveBeenCalledOnce();
+    expect(completionDecorationKey.getState(editor.state)).toBeNull();
+    expect(onAcceptFull).not.toHaveBeenCalled();
+    editor.destroy();
+  });
 });
 
 describe("completion eligibility context", () => {

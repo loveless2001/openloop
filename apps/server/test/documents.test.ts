@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,8 @@ const environment = readEnvironment({
   DATABASE_URL: `file:${join(tempDirectory, "test.db")}`,
   COMPLETION_PROVIDER: "mock",
   CRITIC_PROVIDER: "mock",
+  CAPTURE_TRAINING_TRACES: "true",
+  TRAINING_TRACE_PATH: join(tempDirectory, "completion-traces.jsonl"),
 });
 let database: Database;
 let server: ReturnType<typeof buildServer>;
@@ -77,7 +79,7 @@ describe("Phase 0/1 server", () => {
     ]);
   });
 
-  it("streams mock completion SSE without persisting document content", async () => {
+  it("streams mock completion SSE without persisting document content to the database", async () => {
     const nodeId = "1a5dafdd-b267-4d78-85e9-810b1d56c5cd";
     const createdResponse = await server.inject({
       method: "POST",
@@ -191,6 +193,25 @@ describe("Phase 0/1 server", () => {
     });
     expect(event.statusCode).toBe(202);
     expect(event.json()).toEqual({ accepted: true });
+
+    const traces = readFileSync(environment.TRAINING_TRACE_PATH, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(traces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "completion_candidate",
+          requestId: "bb9952cf-f25d-42a1-a6b2-5a8f6a5c7b92",
+          prefix: "The whole product is model agnostic",
+        }),
+        expect.objectContaining({
+          type: "completion_feedback",
+          requestId,
+          event: "completion_dismissed",
+        }),
+      ]),
+    );
   });
 
   it("allows local and mock providers without keys and rejects incomplete OpenAI configuration", () => {

@@ -64,6 +64,10 @@ text without changing the document.
 - Typing, moving the cursor, changing the prefix, or starting IME composition invalidates the
   active request.
 
+The complete streamed suggestion remains visible as ghost text. A compact action hint beside it
+offers clickable Accept and Reject controls with `Tab` and `Esc` tooltips; `ArrowRight` remains the
+one-word acceptance shortcut.
+
 Completion and criticism have separate provider settings. The default `.env.example` routes only
 completion to `http://127.0.0.1:11434/v1` with `COMPLETION_PROVIDER=ollama` and
 `COMPLETION_MODEL=qwen2.5:0.5b`. Use `COMPLETION_PROVIDER=mock` if you want the deterministic test
@@ -80,6 +84,13 @@ The critic can remain mocked or use an independent OpenAI/OpenAI-compatible back
 restart the server. Generic backends use `CRITIC_PROVIDER=openai-compatible` plus
 `CRITIC_BASE_URL`, `CRITIC_API_KEY`, `CRITIC_MODEL`, and
 `CRITIC_SUPPORTS_JSON_SCHEMA`. Provider credentials remain server-side.
+
+## Opt-in local training traces
+
+Set `CAPTURE_TRAINING_TRACES=true` to capture raw completion context, generated suggestions, and
+accept/reject outcomes as append-only local JSONL. Capture is off by default and the trace path is
+under ignored `data/` storage. See [docs/TRAINING-TRACES.md](docs/TRAINING-TRACES.md) for the schema,
+privacy boundary, and recommended offline Qwen tuning workflow.
 
 ## Markdown files and toolbar
 

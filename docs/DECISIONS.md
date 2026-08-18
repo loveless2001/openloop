@@ -94,3 +94,11 @@ there is no shared or legacy provider path.
 process. A local Ollama endpoint is probed, started when absent, checked for the configured model,
 and warmed before Fastify reports readiness. OpenLoop terminates Ollama only when it owns the child
 process. This makes `pnpm dev` self-starting without hiding model downloads inside routine boot.
+
+## 015 — Capture training data only through explicit local opt-in
+
+The normal completion-event path remains metadata-only. `CAPTURE_TRAINING_TRACES=true` separately
+enables append-only JSONL containing raw cursor context, model output, and interaction outcomes.
+Candidate and feedback records share a request ID so partial acceptance remains reconstructable.
+The default path is ignored local storage, and live online weight updates are deliberately excluded;
+training is an offline, reviewable operation.

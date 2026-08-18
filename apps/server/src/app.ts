@@ -12,12 +12,14 @@ import {
 import { registerCompletionRoutes } from "./routes/completions.js";
 import { registerCriticRoutes } from "./routes/critic.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
+import { TrainingTraceWriter } from "./training-traces.js";
 
 interface BuildServerOptions {
   environment: Environment;
   database?: Database;
   logger?: boolean;
   selectedModel?: SelectedModelAdapters;
+  trainingTraceWriter?: TrainingTraceWriter;
 }
 
 export function buildServer({
@@ -25,6 +27,7 @@ export function buildServer({
   database,
   logger = true,
   selectedModel,
+  trainingTraceWriter,
 }: BuildServerOptions) {
   const ownsDatabase = database === undefined;
   const activeDatabase = database ?? openDatabase(environment.DATABASE_URL);
@@ -32,6 +35,12 @@ export function buildServer({
 
   const server = Fastify({ logger, pluginTimeout: 180_000 });
   const activeModel = selectedModel ?? selectModelAdapters(environment);
+  const activeTrainingTraceWriter =
+    trainingTraceWriter ??
+    new TrainingTraceWriter({
+      enabled: environment.CAPTURE_TRAINING_TRACES,
+      path: environment.TRAINING_TRACE_PATH,
+    });
   if (activeModel.completion.warmup) {
     server.addHook("onReady", async () => {
       await activeModel.completion.warmup?.();
@@ -71,10 +80,16 @@ export function buildServer({
     };
   });
   registerDocumentRoutes(server, activeDatabase);
-  registerCompletionRoutes(server, activeDatabase, activeModel);
+  registerCompletionRoutes(
+    server,
+    activeDatabase,
+    activeModel,
+    activeTrainingTraceWriter,
+  );
   registerCriticRoutes(server, activeDatabase, criticQueue, criticBroker);
 
   server.addHook("onClose", async () => {
+    await activeTrainingTraceWriter.flush();
     await activeModel.completion.shutdown?.();
     if (ownsDatabase) {
       activeDatabase.sqlite.close();

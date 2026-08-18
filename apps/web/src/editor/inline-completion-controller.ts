@@ -134,7 +134,7 @@ export class InlineCompletionController {
 
   dismiss(completion: CompletionDecorationState): void {
     if (!this.active || this.active.requestId !== completion.requestId) return;
-    this.invalidate("dismissed");
+    this.invalidate("rejected");
   }
 
   destroy(): void {
@@ -281,7 +281,7 @@ export class InlineCompletionController {
     );
   }
 
-  private invalidate(reason: "dismissed" | "stale"): void {
+  private invalidate(reason: "dismissed" | "rejected" | "stale"): void {
     const active = this.active;
     if (!active) return;
     this.active = null;
@@ -291,7 +291,11 @@ export class InlineCompletionController {
     }
     this.record(
       active,
-      reason === "dismissed" ? "completion_dismissed" : "completion_stale",
+      {
+        dismissed: "completion_dismissed",
+        rejected: "completion_rejected",
+        stale: "completion_stale",
+      }[reason] as CompletionInteractionRequest["event"],
     );
     this.options.onStatus();
   }

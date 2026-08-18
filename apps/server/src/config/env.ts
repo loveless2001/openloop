@@ -35,6 +35,11 @@ const EnvironmentSchema = z
     CRITIC_API_KEY: z.string().default(""),
     CRITIC_MODEL: z.string().min(1).default("gpt-5.6-terra"),
     CRITIC_SUPPORTS_JSON_SCHEMA: booleanFromString.default(false),
+    CAPTURE_TRAINING_TRACES: booleanFromString.default(false),
+    TRAINING_TRACE_PATH: z
+      .string()
+      .min(1)
+      .default("data/training/completion-traces.jsonl"),
     COMPLETION_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(300),
     CRITIC_IDLE_MS: z.coerce.number().int().nonnegative().default(1800),
     AUTOSAVE_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(750),

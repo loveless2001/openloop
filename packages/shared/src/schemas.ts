@@ -317,6 +317,7 @@ export const CompletionInteractionEvent = z.enum([
   "completion_shown",
   "completion_accepted_full",
   "completion_accepted_word",
+  "completion_rejected",
   "completion_dismissed",
   "completion_stale",
   "completion_error",

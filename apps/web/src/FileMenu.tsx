@@ -29,6 +29,7 @@ export function FileMenu({
 }: FileMenuProps) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -49,13 +50,34 @@ export function FileMenu({
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [onNew, onSave]);
 
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
   const run = (action: () => void | Promise<void>) => {
     setOpen(false);
     void Promise.resolve(action()).catch(() => undefined);
   };
 
   return (
-    <div className="file-menu">
+    <div className="file-menu" ref={menuRef}>
       <button
         aria-expanded={open}
         aria-haspopup="menu"
