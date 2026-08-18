@@ -60,9 +60,27 @@ export function useDocumentSession() {
   const timerRef = useRef<number | null>(null);
   const transientTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
+  const saveCompletionRef = useRef<Promise<void> | null>(null);
   const conflictRef = useRef(false);
   const remoteDocumentRef = useRef<DocumentRecord | null>(null);
   const flushRef = useRef<() => Promise<void>>(async () => undefined);
+
+  const activateDocument = useCallback((nextDocument: DocumentRecord) => {
+    window.localStorage.setItem(DOCUMENT_STORAGE_KEY, nextDocument.id);
+    conflictRef.current = false;
+    remoteDocumentRef.current = null;
+    pendingRef.current = null;
+    documentRef.current = nextDocument;
+    titleRef.current = nextDocument.title;
+    contentRef.current = nextDocument.contentJson;
+    plainTextRef.current = nextDocument.plainText;
+    versionRef.current = nextDocument.version;
+    setDocument(nextDocument);
+    setTitle(nextDocument.title);
+    setVersion(nextDocument.version);
+    setStatus("saved");
+    setMessage("Saved locally");
+  }, []);
 
   const scheduleSave = useCallback(() => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -97,17 +115,7 @@ export function useDocumentSession() {
         }
         if (cancelled) return;
 
-        window.localStorage.setItem(DOCUMENT_STORAGE_KEY, loaded.id);
-        documentRef.current = loaded;
-        titleRef.current = loaded.title;
-        contentRef.current = loaded.contentJson;
-        plainTextRef.current = loaded.plainText;
-        versionRef.current = loaded.version;
-        setDocument(loaded);
-        setTitle(loaded.title);
-        setVersion(loaded.version);
-        setStatus("saved");
-        setMessage("Saved locally");
+        activateDocument(loaded);
       } catch (error) {
         if (cancelled) return;
         setStatus("error");
@@ -127,7 +135,7 @@ export function useDocumentSession() {
         window.clearTimeout(transientTimerRef.current);
       }
     };
-  }, []);
+  }, [activateDocument]);
 
   const reportTransientStatus = useCallback(
     (nextMessage?: string, durationMs?: number) => {
@@ -149,14 +157,22 @@ export function useDocumentSession() {
   flushRef.current = async () => {
     const activeDocument = documentRef.current;
     const pending = pendingRef.current;
-    if (!activeDocument || !pending || conflictRef.current) return;
+    if (!activeDocument || conflictRef.current) return;
     if (saveInFlightRef.current) {
-      scheduleSave();
+      await saveCompletionRef.current;
+      if (pendingRef.current && !conflictRef.current) {
+        await flushRef.current();
+      }
       return;
     }
+    if (!pending) return;
 
     pendingRef.current = null;
     saveInFlightRef.current = true;
+    let finishSave: () => void = () => undefined;
+    saveCompletionRef.current = new Promise((resolve) => {
+      finishSave = resolve;
+    });
     setStatus("saving");
     setMessage("Saving…");
     const submitted = { ...pending, baseVersion: versionRef.current };
@@ -213,6 +229,8 @@ export function useDocumentSession() {
       }
     } finally {
       saveInFlightRef.current = false;
+      finishSave();
+      saveCompletionRef.current = null;
     }
   };
 
@@ -286,14 +304,45 @@ export function useDocumentSession() {
     scheduleSave();
   };
 
+  const createFreshDocument = useCallback(
+    async (nextTitle: string, contentJson: Record<string, JsonValue>) => {
+      try {
+        await flushRef.current();
+        const created = await createDocument(nextTitle, contentJson);
+        activateDocument(created);
+        return created;
+      } catch (error) {
+        setStatus("error");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Could not create the document.",
+        );
+        throw error;
+      }
+    },
+    [activateDocument],
+  );
+
+  const saveNow = useCallback(async () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    await flushRef.current();
+    reportTransientStatus("Saved locally", 1_500);
+  }, [reportTransientStatus]);
+
   return {
     document,
+    createFreshDocument,
     message: transientStatus ?? message,
     queueEditorChange,
     reportTransientStatus,
     requestCritic: critic.request,
     reloadSavedVersion,
     saveLocalDraftAfterConflict,
+    saveNow,
     status,
     setCriticComposing: critic.setComposing,
     title,

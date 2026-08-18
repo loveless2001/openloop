@@ -118,7 +118,7 @@ export function mergeChangeBatches(
   older: EditorChangeBatch | null,
   newer: EditorChangeBatch,
 ): EditorChangeBatch {
-  if (!older) return newer;
+  if (!older || older.documentId !== newer.documentId) return newer;
   const changed = new Map(
     older.changedBlocks.map((block) => [block.nodeId, block]),
   );

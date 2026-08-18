@@ -12,6 +12,8 @@ export interface SelectedModelAdapter {
   criticModel: string;
 }
 
+const OPENAI_BASE_URL = "https://api.openai.com/v1";
+
 export function selectModelAdapter(
   environment: Environment,
 ): SelectedModelAdapter {
@@ -23,13 +25,19 @@ export function selectModelAdapter(
     };
   }
 
+  const isOpenAI = environment.MODEL_PROVIDER === "openai";
+
   return {
     adapter: new OpenAICompatibleAdapter({
-      baseUrl: environment.MODEL_BASE_URL,
+      baseUrl: isOpenAI ? OPENAI_BASE_URL : environment.MODEL_BASE_URL,
       apiKey: environment.MODEL_API_KEY,
       fastModel: environment.MODEL_FAST,
       smartModel: environment.MODEL_SMART,
-      supportsJsonSchema: environment.MODEL_SUPPORTS_JSON_SCHEMA,
+      supportsJsonSchema: isOpenAI
+        ? true
+        : environment.MODEL_SUPPORTS_JSON_SCHEMA,
+      providerId: isOpenAI ? "openai" : "openai-compatible",
+      openAIRequestParameters: isOpenAI,
     }),
     completionModel: environment.MODEL_FAST,
     criticModel: environment.MODEL_SMART,

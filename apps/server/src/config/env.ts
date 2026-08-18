@@ -18,11 +18,13 @@ const EnvironmentSchema = z
       .string()
       .startsWith("file:")
       .default("file:./data/openloop.db"),
-    MODEL_PROVIDER: z.enum(["mock", "openai-compatible"]).default("mock"),
+    MODEL_PROVIDER: z
+      .enum(["mock", "openai", "openai-compatible"])
+      .default("mock"),
     MODEL_BASE_URL: z.url().default("http://localhost:11434/v1"),
     MODEL_API_KEY: z.string().default(""),
-    MODEL_FAST: z.string().min(1).default("fast-model-id"),
-    MODEL_SMART: z.string().min(1).default("smart-model-id"),
+    MODEL_FAST: z.string().min(1).default("gpt-5.6-luna"),
+    MODEL_SMART: z.string().min(1).default("gpt-5.6-terra"),
     MODEL_SUPPORTS_JSON_SCHEMA: booleanFromString.default(false),
     COMPLETION_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(300),
     CRITIC_IDLE_MS: z.coerce.number().int().nonnegative().default(1800),
@@ -41,10 +43,7 @@ const EnvironmentSchema = z
     LOG_DOCUMENT_CONTENT: booleanFromString.default(false),
   })
   .superRefine((environment, context) => {
-    if (
-      environment.MODEL_PROVIDER === "openai-compatible" &&
-      !environment.MODEL_API_KEY
-    ) {
+    if (environment.MODEL_PROVIDER !== "mock" && !environment.MODEL_API_KEY) {
       context.addIssue({
         code: "custom",
         message:
@@ -59,7 +58,10 @@ export type Environment = z.infer<typeof EnvironmentSchema>;
 export function readEnvironment(
   source: NodeJS.ProcessEnv = process.env,
 ): Environment {
-  return EnvironmentSchema.parse(source);
+  return EnvironmentSchema.parse({
+    ...source,
+    MODEL_API_KEY: source.MODEL_API_KEY ?? source.OPENAI_API_KEY,
+  });
 }
 
 export function loadEnvironment(): Environment {

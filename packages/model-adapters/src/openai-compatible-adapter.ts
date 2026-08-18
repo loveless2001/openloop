@@ -41,15 +41,18 @@ export interface OpenAICompatibleAdapterConfig {
   fastModel: string;
   smartModel: string;
   supportsJsonSchema: boolean;
+  providerId?: string;
+  openAIRequestParameters?: boolean;
   fetchImplementation?: typeof fetch;
 }
 
 export class OpenAICompatibleAdapter implements ModelAdapter {
-  readonly providerId = "openai-compatible";
+  readonly providerId: string;
   readonly capabilities: ModelAdapter["capabilities"];
   private readonly fetchImplementation: typeof fetch;
 
   constructor(private readonly config: OpenAICompatibleAdapterConfig) {
+    this.providerId = config.providerId ?? "openai-compatible";
     this.fetchImplementation = config.fetchImplementation ?? fetch;
     this.capabilities = {
       streaming: true,
@@ -75,7 +78,12 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
             { role: "system", content: completionSystemPrompt },
             { role: "user", content: buildCompletionPrompt(input) },
           ],
-          max_tokens: input.maxOutputTokens,
+          ...(this.config.openAIRequestParameters
+            ? {
+                max_completion_tokens: input.maxOutputTokens,
+                reasoning_effort: "none",
+              }
+            : { max_tokens: input.maxOutputTokens }),
           stream: true,
         }),
         signal: activeSignal.signal,

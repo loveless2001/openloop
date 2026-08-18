@@ -54,6 +54,35 @@ describe("changed-node accumulator", () => {
     ]);
   });
 
+  it("starts a new accumulation when the active document changes", () => {
+    const newer = {
+      documentId: "9a69bec1-c348-454c-a828-4531541606ea",
+      baseVersion: 0,
+      clientSequence: 1,
+      changedBlocks: [],
+      removedNodeIds: [],
+      mergedNodeMap: {},
+      reason: "load" as const,
+    };
+    const merged = mergeChangeBatches(
+      {
+        ...newer,
+        documentId,
+        changedBlocks: [
+          {
+            nodeId: "d8b40629-7374-499e-95bd-dd9742a61c1d",
+            nodeType: "paragraph",
+            text: "Old document",
+            headingPath: [],
+          },
+        ],
+      },
+      newer,
+    );
+
+    expect(merged).toEqual(newer);
+  });
+
   it("emits the edited block without sending the full document", () => {
     const editor = new Editor({
       extensions: [StarterKit, StableNodeId],

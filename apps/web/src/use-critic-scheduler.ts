@@ -47,6 +47,10 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
     const document = activeOptions.getDocument();
     const pending = pendingRef.current;
     if (!document || activeOptions.isBlocked()) return;
+    if (pending && pending.documentId !== document.id) {
+      pendingRef.current = null;
+      return;
+    }
     if (!pending) {
       if (trigger === "manual") {
         activeOptions.reportStatus("No changed text to critique", 1_500);

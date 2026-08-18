@@ -2,14 +2,16 @@
 
 OpenLoop is a local-first, stateful LLM co-writer harness. This repository currently implements
 Phases 0–3 from `openloop-cowriter-harness-spec.md`: workspace and persistence, editor
-persistence, inline completion, and the critic issue ledger.
+persistence, inline completion, and the critic issue ledger. The current iteration also adds a
+Markdown-first file workflow and production OpenAI autocomplete configuration.
 
 The current vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
 versions; local SQLite persistence; streamed ghost-text completion; queued changed-block critique;
 anchored gutter markers; persistent issue actions and history; and visible dirty, saving, conflict,
-and error states. Anchor reconciliation, resurfacing, and export belong to later phases and are
-intentionally not implemented.
+and error states. Markdown files can be opened and downloaded from the File menu. Anchor
+reconciliation, resurfacing, and the formal unresolved-issue export review belong to later phases
+and are intentionally not implemented.
 
 ## Requirements
 
@@ -50,10 +52,25 @@ as ghost text without changing the document.
 - Typing, moving the cursor, changing the prefix, or starting IME composition invalidates the
   active request.
 
-To use an OpenAI-compatible completion endpoint, set `MODEL_PROVIDER=openai-compatible`,
-`MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_FAST`, and `MODEL_SMART` in `.env`. Provider credentials
-remain server-side. The OpenAI-compatible adapter implements the complete model boundary, while
-the fast model handles completion and the smart model handles changed-block critique.
+For real autocomplete with OpenAI, copy `.env.openai.example` to `.env`, set
+`OPENAI_API_KEY`, and restart the server. The production defaults are `gpt-5.6-luna` for fast,
+low-reasoning completion and `gpt-5.6-terra` for the smarter critic. The key remains server-side,
+and the header reports the active provider and fast model. Account model access can vary.
+
+To use another OpenAI-compatible endpoint instead, set `MODEL_PROVIDER=openai-compatible`,
+`MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_FAST`, `MODEL_SMART`, and
+`MODEL_SUPPORTS_JSON_SCHEMA`. The same adapter boundary supports both paths.
+
+## Markdown files and toolbar
+
+The editor uses TipTap's Markdown parser/serializer while retaining internal TipTap JSON and stable
+node IDs for issue anchoring. The File menu supports New, Open Markdown, Save locally, and Download
+Markdown. `Ctrl/Cmd+N`, `Ctrl/Cmd+O`, and `Ctrl/Cmd+S` provide the same operations. Opening a file
+creates a new locally persisted document; it does not overwrite the previous document.
+
+The compact toolbar applies Markdown-compatible bold, italic, inline code, headings, lists, and
+blockquote formatting. Downloaded `.md` files contain document content only; internal node IDs and
+issue comments are not included.
 
 ## Critic and issue ledger
 

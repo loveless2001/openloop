@@ -85,6 +85,15 @@ export const HealthResponseSchema = z.object({
   status: z.literal("ok"),
 });
 
+export const ModelStatusResponseSchema = z.object({
+  provider: z.string().min(1),
+  completionModel: z.string().min(1),
+  criticModel: z.string().min(1),
+  mode: z.enum(["offline", "remote"]),
+});
+
+export type ModelStatusResponse = z.infer<typeof ModelStatusResponseSchema>;
+
 export const IssueType = z.enum([
   "unsupported_claim",
   "ambiguity",

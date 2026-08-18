@@ -70,3 +70,20 @@ creating an anchor that the persisted document cannot support.
 Apply rewrite validates the current persisted quote and returns a node-relative editor operation.
 It appends `apply_rewrite` history but does not mark the issue resolved. Phase 4 reconciliation will
 decide whether the resulting edit actually resolves, invalidates, or preserves the objection.
+
+## 012 — Use Markdown at the file boundary and TipTap JSON for anchors
+
+Writers open and download Markdown, and toolbar operations map to Markdown-compatible structure.
+Internally, TipTap JSON remains canonical because the critic ledger anchors to persistent block IDs
+that Markdown does not represent. Import assigns fresh stable IDs; download serializes document
+content and deliberately omits IDs and issue metadata. This preserves the issue lifecycle while
+providing a normal Markdown workflow.
+
+## 013 — Give autocomplete a dedicated lightweight production model
+
+`MODEL_PROVIDER=openai` is a first-class configuration rather than an undocumented generic
+endpoint recipe. It defaults completion to `gpt-5.6-luna`, sends Chat Completions streaming with
+`reasoning_effort: none`, and keeps the smart critic independently configurable as
+`gpt-5.6-terra`. The deterministic mock remains the default in `.env.example` so a fresh clone is
+runnable without credentials; `.env.openai.example` is the production-model template. Generic
+OpenAI-compatible endpoints retain the legacy token parameter for broader compatibility.

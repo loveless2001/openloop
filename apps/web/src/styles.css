@@ -28,6 +28,17 @@ input {
   font: inherit;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
@@ -52,6 +63,82 @@ input {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 19px;
   font-weight: 700;
+}
+
+.brand-area {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.file-menu {
+  position: relative;
+  color: #3e3933;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.menu-trigger:hover,
+.menu-trigger[aria-expanded="true"] {
+  background: #e8e3da;
+}
+
+.menu-popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: 245px;
+  padding: 6px;
+  border: 1px solid #d3ccc0;
+  border-radius: 8px;
+  background: #fffdf8;
+  box-shadow: 0 14px 38px rgb(44 39 33 / 18%);
+}
+
+.menu-popover button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 5px;
+  color: #39342e;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.menu-popover button:hover,
+.menu-popover button:focus-visible {
+  background: #edf4f0;
+  outline: none;
+}
+
+.menu-popover hr {
+  width: 100%;
+  margin: 5px 0;
+  border: 0;
+  border-top: 1px solid #e4ded4;
+}
+
+.menu-popover kbd {
+  color: #8b847b;
+  font-size: 11px;
 }
 
 .brand-mark {
@@ -81,6 +168,8 @@ input {
 }
 
 .phase-badge {
+  max-width: 230px;
+  overflow: hidden;
   padding: 5px 10px;
   border: 1px solid #c9d8d0;
   border-radius: 999px;
@@ -90,6 +179,8 @@ input {
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .top-actions {
@@ -141,6 +232,60 @@ input {
   outline: none;
 }
 
+.editor-stack {
+  min-height: 480px;
+}
+
+.format-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: -42px -50px 38px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e4ded3;
+  color: #5f5850;
+}
+
+.format-toolbar button {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.format-toolbar button:hover:not(:disabled),
+.format-toolbar button[aria-pressed="true"] {
+  border-color: #c9d8d0;
+  color: #173c32;
+  background: #edf4f0;
+}
+
+.format-toolbar button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: #ddd6ca;
+}
+
+.markdown-indicator {
+  margin-left: auto;
+  color: #8a8278;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .issue-gutter-marker {
   position: absolute;
   width: 24px;
@@ -170,6 +315,35 @@ input {
 
 .openloop-editor p {
   margin: 0 0 1em;
+}
+
+.openloop-editor blockquote {
+  margin: 1.2em 0;
+  padding-left: 1em;
+  border-left: 3px solid #a7bdb3;
+  color: #565049;
+}
+
+.openloop-editor code {
+  padding: 0.12em 0.3em;
+  border-radius: 4px;
+  background: #f0ece4;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.84em;
+}
+
+.openloop-editor pre {
+  padding: 16px;
+  overflow: auto;
+  border-radius: 7px;
+  color: #f5f2eb;
+  background: #292d2b;
+}
+
+.openloop-editor pre code {
+  padding: 0;
+  color: inherit;
+  background: transparent;
 }
 
 .openloop-editor h1,

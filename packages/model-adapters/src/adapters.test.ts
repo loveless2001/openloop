@@ -106,6 +106,47 @@ describe("OpenAICompatibleAdapter", () => {
     });
   });
 
+  it("uses low-latency OpenAI parameters for the production fast model", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Promise.resolve(new Response(stream, { status: 200 })),
+    );
+    const adapter = new OpenAICompatibleAdapter({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "test-key",
+      fastModel: "gpt-5.6-luna",
+      smartModel: "gpt-5.6-terra",
+      supportsJsonSchema: true,
+      providerId: "openai",
+      openAIRequestParameters: true,
+      fetchImplementation,
+    });
+
+    for await (const chunk of adapter.streamCompletion(
+      completionInput,
+      new AbortController().signal,
+    )) {
+      expect(chunk.done).toBe(true);
+    }
+
+    const requestBody = JSON.parse(
+      String(fetchImplementation.mock.calls[0]?.[1]?.body),
+    );
+    expect(adapter.providerId).toBe("openai");
+    expect(requestBody).toMatchObject({
+      model: "gpt-5.6-luna",
+      max_completion_tokens: 60,
+      reasoning_effort: "none",
+      stream: true,
+    });
+    expect(requestBody).not.toHaveProperty("max_tokens");
+  });
+
   it("strips Markdown fences and validates critic JSON", async () => {
     const fetchImplementation = vi.fn<typeof fetch>(async () =>
       Promise.resolve(

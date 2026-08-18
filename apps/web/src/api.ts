@@ -6,6 +6,7 @@ import {
   IssueActionResponseSchema,
   IssueEventsResponseSchema,
   IssueListResponseSchema,
+  ModelStatusResponseSchema,
   SaveDocumentResponseSchema,
   type CriticJobRequest,
   type DocumentRecord,
@@ -13,6 +14,7 @@ import {
   type IssueRecord,
   type EditorChangeBatch,
   type JsonValue,
+  type ModelStatusResponse,
 } from "@openloop/shared";
 
 export class ApiClientError extends Error {
@@ -23,6 +25,11 @@ export class ApiClientError extends Error {
   ) {
     super(message);
   }
+}
+
+export async function loadModelStatus(): Promise<ModelStatusResponse> {
+  const response = await fetch("/v1/model-status");
+  return ModelStatusResponseSchema.parse(await parseResponse(response));
 }
 
 export async function submitCriticJob(

@@ -1,21 +1,76 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { loadModelStatus } from "./api.js";
 import {
   OpenLoopEditor,
   type OpenLoopEditorHandle,
 } from "./editor/OpenLoopEditor.js";
 import { IssuePanel } from "./IssuePanel.js";
+import { FileMenu, markdownFilename } from "./FileMenu.js";
 import { useDocumentSession } from "./use-document-session.js";
 import { useIssueLedger } from "./use-issue-ledger.js";
 
 export function App() {
   const session = useDocumentSession();
   const editorRef = useRef<OpenLoopEditorHandle>(null);
+  const [modelLabel, setModelLabel] = useState("Checking model…");
   const ledger = useIssueLedger({
     documentId: session.document?.id,
     documentVersion: session.version,
     onStatus: session.reportTransientStatus,
   });
+
+  useEffect(() => {
+    let active = true;
+    void loadModelStatus()
+      .then((status) => {
+        if (!active) return;
+        setModelLabel(
+          status.mode === "offline"
+            ? "Mock · offline"
+            : `${status.provider} · ${status.completionModel}`,
+        );
+      })
+      .catch(() => {
+        if (active) setModelLabel("Model unavailable");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const newDocument = useCallback(async () => {
+    await session.createFreshDocument("Untitled", {
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { nodeId: crypto.randomUUID() } }],
+    });
+  }, [session.createFreshDocument]);
+
+  const openMarkdown = useCallback(
+    async (file: File) => {
+      const markdown = await file.text();
+      const content = editorRef.current?.parseMarkdown(markdown);
+      if (!content) throw new Error("The editor is not ready.");
+      const title = file.name.replace(/\.(?:md|markdown)$/i, "") || "Untitled";
+      await session.createFreshDocument(title, content);
+      session.reportTransientStatus(`Opened ${file.name}`, 2_000);
+    },
+    [session.createFreshDocument, session.reportTransientStatus],
+  );
+
+  const downloadMarkdown = useCallback(() => {
+    const markdown = editorRef.current?.getMarkdown();
+    if (markdown === undefined) return;
+    const url = URL.createObjectURL(
+      new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = markdownFilename(session.title);
+    link.click();
+    URL.revokeObjectURL(url);
+    session.reportTransientStatus(`Downloaded ${link.download}`, 2_000);
+  }, [session.reportTransientStatus, session.title]);
 
   if (!session.document) {
     return (
@@ -29,9 +84,18 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="top-bar">
-        <div className="brand">
-          <span className="brand-mark">O</span>
-          <span>OpenLoop</span>
+        <div className="brand-area">
+          <div className="brand">
+            <span className="brand-mark">O</span>
+            <span>OpenLoop</span>
+          </div>
+          <FileMenu
+            documentTitle={session.title}
+            onDownload={downloadMarkdown}
+            onNew={newDocument}
+            onOpen={openMarkdown}
+            onSave={session.saveNow}
+          />
         </div>
         <input
           aria-label="Document title"
@@ -48,7 +112,9 @@ export function App() {
           >
             Critique now
           </button>
-          <span className="phase-badge">Local · Phase 3</span>
+          <span className="phase-badge" title="Active autocomplete provider">
+            {modelLabel}
+          </span>
         </div>
       </header>
 

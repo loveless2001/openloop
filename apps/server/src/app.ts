@@ -40,6 +40,12 @@ export function buildServer({
     server.log,
   );
   server.get("/v1/health", async () => ({ status: "ok" as const }));
+  server.get("/v1/model-status", async () => ({
+    provider: activeModel.adapter.providerId,
+    completionModel: activeModel.completionModel,
+    criticModel: activeModel.criticModel,
+    mode: activeModel.adapter.providerId === "mock" ? "offline" : "remote",
+  }));
   registerDocumentRoutes(server, activeDatabase);
   registerCompletionRoutes(server, activeDatabase, activeModel);
   registerCriticRoutes(server, activeDatabase, criticQueue, criticBroker);

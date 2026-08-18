@@ -7,6 +7,7 @@ import {
   type JsonValue,
 } from "@openloop/shared";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { Markdown } from "@tiptap/markdown";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
@@ -45,6 +46,8 @@ interface OpenLoopEditorProps {
 export interface OpenLoopEditorHandle {
   applyOperation: (operation: EditorOperation, expectedText: string) => boolean;
   focusIssue: (issue: IssueRecord) => boolean;
+  getMarkdown: () => string;
+  parseMarkdown: (markdown: string) => Record<string, JsonValue>;
 }
 
 function nodeTypes(document: ProseMirrorNode): Map<string, string> {
@@ -104,6 +107,7 @@ export const OpenLoopEditor = forwardRef<
     {
       extensions: [
         StarterKit,
+        Markdown,
         StableNodeId,
         CompletionDecoration.configure({
           onAcceptFull: (completion) =>
@@ -276,9 +280,108 @@ export const OpenLoopEditor = forwardRef<
         editor.commands.focus();
         return true;
       },
+      getMarkdown() {
+        return editor?.getMarkdown() ?? "";
+      },
+      parseMarkdown(markdown) {
+        if (!editor?.markdown) throw new Error("The editor is not ready.");
+        const parsed = JsonObjectSchema.parse(editor.markdown.parse(markdown));
+        return ensureStableNodeIds(parsed).content;
+      },
     }),
     [editor],
   );
 
-  return <EditorContent editor={editor} />;
+  return (
+    <div className="editor-stack">
+      <div
+        aria-label="Markdown formatting"
+        className="format-toolbar"
+        role="toolbar"
+      >
+        <button
+          aria-label="Undo"
+          disabled={!editor?.can().chain().focus().undo().run()}
+          onClick={() => editor?.chain().focus().undo().run()}
+          title="Undo"
+          type="button"
+        >
+          ↶
+        </button>
+        <button
+          aria-label="Redo"
+          disabled={!editor?.can().chain().focus().redo().run()}
+          onClick={() => editor?.chain().focus().redo().run()}
+          title="Redo"
+          type="button"
+        >
+          ↷
+        </button>
+        <span className="toolbar-divider" />
+        <button
+          aria-pressed={editor?.isActive("bold") ?? false}
+          onClick={() => editor?.chain().focus().toggleBold().run()}
+          title="Bold — Markdown **text**"
+          type="button"
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          aria-pressed={editor?.isActive("italic") ?? false}
+          onClick={() => editor?.chain().focus().toggleItalic().run()}
+          title="Italic — Markdown *text*"
+          type="button"
+        >
+          <em>I</em>
+        </button>
+        <button
+          aria-pressed={editor?.isActive("code") ?? false}
+          onClick={() => editor?.chain().focus().toggleCode().run()}
+          title="Inline code — Markdown `code`"
+          type="button"
+        >
+          {"<>"}
+        </button>
+        <span className="toolbar-divider" />
+        <button
+          aria-pressed={editor?.isActive("heading", { level: 1 }) ?? false}
+          onClick={() =>
+            editor?.chain().focus().toggleHeading({ level: 1 }).run()
+          }
+          title="Heading 1"
+          type="button"
+        >
+          H1
+        </button>
+        <button
+          aria-pressed={editor?.isActive("heading", { level: 2 }) ?? false}
+          onClick={() =>
+            editor?.chain().focus().toggleHeading({ level: 2 }).run()
+          }
+          title="Heading 2"
+          type="button"
+        >
+          H2
+        </button>
+        <button
+          aria-pressed={editor?.isActive("bulletList") ?? false}
+          onClick={() => editor?.chain().focus().toggleBulletList().run()}
+          title="Bullet list"
+          type="button"
+        >
+          • List
+        </button>
+        <button
+          aria-pressed={editor?.isActive("blockquote") ?? false}
+          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+          title="Blockquote"
+          type="button"
+        >
+          “ ”
+        </button>
+        <span className="markdown-indicator">Markdown</span>
+      </div>
+      <EditorContent editor={editor} />
+    </div>
+  );
 });

@@ -1,10 +1,14 @@
 # Architecture
 
-This document describes the implemented Phase 0–3 slice only.
+This document describes the implemented Phase 0–3 slice plus the current Markdown/file workflow.
 
 The browser owns the TipTap editor, stable node IDs, changed-node tracking, dirty state, and
 autosave scheduling. It sends canonical TipTap JSON, derived text, a base version, and an
 accumulated `EditorChangeBatch` to the Fastify API after 750 ms of inactivity.
+
+The official TipTap Markdown bridge parses opened `.md` files and serializes downloads. Markdown
+is the user-facing file format, while TipTap JSON remains the internal anchor-preserving format.
+Imported blocks receive fresh stable IDs; exported files omit IDs and issue metadata.
 
 The browser also owns completion eligibility, debounce, request cancellation, staleness checks,
 and the ProseMirror ghost-text decoration. Completion text remains outside TipTap JSON until the
@@ -28,13 +32,14 @@ the specification so later vertical slices can add behavior without replacing pe
 remain unused until Phase 5.
 
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
-mock implementation, and OpenAI-compatible implementation.
+mock implementation, and OpenAI/OpenAI-compatible implementation.
 
 The server selects one `ModelAdapter` at startup. `/v1/completions/stream` hashes request context,
 persists model-run metadata, and emits provider-neutral SSE `delta`, `done`, or `error` events. The
 mock adapter is deterministic. The OpenAI-compatible adapter owns provider request formatting,
 stream parsing, timeouts, JSON-schema handling, and one repair attempt for malformed structured
-outputs.
+outputs. The OpenAI configuration uses `gpt-5.6-luna` with no reasoning effort for latency-sensitive
+autocomplete and leaves the smarter critic model independently configurable.
 
 Critic jobs use a bounded in-process queue with at most one active job per document and at most
 three queued jobs globally. Pending jobs for one document merge changed blocks by stable node ID.

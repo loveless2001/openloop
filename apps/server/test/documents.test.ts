@@ -36,6 +36,17 @@ describe("Phase 0/1 server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: "ok" });
 
+    const modelStatus = await server.inject({
+      method: "GET",
+      url: "/v1/model-status",
+    });
+    expect(modelStatus.json()).toEqual({
+      provider: "mock",
+      completionModel: "mock-fast-v1",
+      criticModel: "mock-smart-v1",
+      mode: "offline",
+    });
+
     const tables = database.sqlite
       .prepare(
         "select name from sqlite_master where type = 'table' and name in ('documents', 'issues', 'issue_events', 'model_runs', 'preference_weights') order by name",
