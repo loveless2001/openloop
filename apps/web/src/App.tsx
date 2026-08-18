@@ -1,8 +1,21 @@
-import { OpenLoopEditor } from "./editor/OpenLoopEditor.js";
+import { useRef } from "react";
+
+import {
+  OpenLoopEditor,
+  type OpenLoopEditorHandle,
+} from "./editor/OpenLoopEditor.js";
+import { IssuePanel } from "./IssuePanel.js";
 import { useDocumentSession } from "./use-document-session.js";
+import { useIssueLedger } from "./use-issue-ledger.js";
 
 export function App() {
   const session = useDocumentSession();
+  const editorRef = useRef<OpenLoopEditorHandle>(null);
+  const ledger = useIssueLedger({
+    documentId: session.document?.id,
+    documentVersion: session.version,
+    onStatus: session.reportTransientStatus,
+  });
 
   if (!session.document) {
     return (
@@ -27,7 +40,16 @@ export function App() {
           onChange={(event) => session.updateTitle(event.target.value)}
           value={session.title}
         />
-        <span className="phase-badge">Local · Phase 1</span>
+        <div className="top-actions">
+          <button
+            className="critique-button"
+            onClick={() => session.requestCritic("manual")}
+            type="button"
+          >
+            Critique now
+          </button>
+          <span className="phase-badge">Local · Phase 3</span>
+        </div>
       </header>
 
       <main className="workspace">
@@ -35,24 +57,53 @@ export function App() {
           <div className="paper">
             <OpenLoopEditor
               baseVersion={session.version}
+              completionBlocked={session.status === "conflict"}
               content={session.document.contentJson}
               documentId={session.document.id}
+              issues={ledger.issues}
               key={`${session.document.id}:${session.document.updatedAt}`}
+              onCompletionStatus={session.reportTransientStatus}
+              onCompositionChange={session.setCriticComposing}
+              onCriticTrigger={session.requestCritic}
               onChange={session.queueEditorChange}
+              onSelectIssue={(issueId) => {
+                const issue = ledger.issues.find(
+                  (entry) => entry.id === issueId,
+                );
+                ledger.selectIssue(issueId);
+                if (issue) editorRef.current?.focusIssue(issue);
+              }}
+              ref={editorRef}
+              selectedIssueId={ledger.selectedIssueId}
             />
           </div>
         </section>
-        <aside className="issue-panel" aria-label="Open loops">
-          <div>
-            <p className="eyebrow">Writing ledger</p>
-            <h2>Open loops</h2>
-          </div>
-          <div className="empty-ledger">
-            <span aria-hidden="true">○</span>
-            <p>No issues yet.</p>
-            <small>Editorial issue memory arrives in Phase 3.</small>
-          </div>
-        </aside>
+        <IssuePanel
+          actionPending={ledger.actionPending}
+          events={ledger.events}
+          issues={ledger.issues}
+          onAction={(issue, action) => {
+            void ledger.act(issue, action).then((operation) => {
+              if (
+                operation &&
+                !editorRef.current?.applyOperation(
+                  operation,
+                  issue.anchor.quote,
+                )
+              ) {
+                session.reportTransientStatus(
+                  "The anchored text changed before the rewrite could be applied.",
+                  2_500,
+                );
+              }
+            });
+          }}
+          onSelect={(issue) => {
+            ledger.selectIssue(issue?.id);
+            if (issue) editorRef.current?.focusIssue(issue);
+          }}
+          selectedIssue={ledger.selectedIssue}
+        />
       </main>
 
       <footer className="status-bar" data-status={session.status}>

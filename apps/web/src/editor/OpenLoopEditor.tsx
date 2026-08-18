@@ -1,42 +1,126 @@
 import {
   JsonObjectSchema,
+  type CriticTrigger,
+  type EditorOperation,
   type EditorChangeBatch,
+  type IssueRecord,
   type JsonValue,
 } from "@openloop/shared";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
-import { useMemo, useRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
 
 import { buildChangeBatch } from "./change-tracker.js";
+import { CompletionDecoration } from "./completion-decoration.js";
+import { InlineCompletionController } from "./inline-completion-controller.js";
+import { IssueGutter, setIssueGutterState } from "./issue-gutter.js";
 import { ensureStableNodeIds, StableNodeId } from "./stable-node-id.js";
 
 interface OpenLoopEditorProps {
   documentId: string;
   baseVersion: number;
   content: Record<string, JsonValue>;
+  completionBlocked: boolean;
+  issues: IssueRecord[];
+  selectedIssueId?: string;
+  onCompletionStatus: (message?: string, durationMs?: number) => void;
+  onCompositionChange: (composing: boolean) => void;
+  onCriticTrigger: (trigger: CriticTrigger) => void;
   onChange: (
     content: Record<string, JsonValue>,
     plainText: string,
     batch: EditorChangeBatch,
   ) => void;
+  onSelectIssue: (issueId?: string) => void;
 }
 
-export function OpenLoopEditor({
-  documentId,
-  baseVersion,
-  content,
-  onChange,
-}: OpenLoopEditorProps) {
+export interface OpenLoopEditorHandle {
+  applyOperation: (operation: EditorOperation, expectedText: string) => boolean;
+  focusIssue: (issue: IssueRecord) => boolean;
+}
+
+function nodeTypes(document: ProseMirrorNode): Map<string, string> {
+  const result = new Map<string, string>();
+  document.descendants((node) => {
+    if (typeof node.attrs.nodeId === "string") {
+      result.set(node.attrs.nodeId, node.type.name);
+    }
+  });
+  return result;
+}
+
+export const OpenLoopEditor = forwardRef<
+  OpenLoopEditorHandle,
+  OpenLoopEditorProps
+>(function OpenLoopEditor(
+  {
+    documentId,
+    baseVersion,
+    content,
+    completionBlocked,
+    issues,
+    selectedIssueId,
+    onCompletionStatus,
+    onCompositionChange,
+    onCriticTrigger,
+    onChange,
+    onSelectIssue,
+  },
+  ref,
+) {
   const normalized = useMemo(() => ensureStableNodeIds(content), [content]);
   const versionRef = useRef(baseVersion);
   const onChangeRef = useRef(onChange);
+  const completionBlockedRef = useRef(completionBlocked);
+  const onCompletionStatusRef = useRef(onCompletionStatus);
+  const onCompositionChangeRef = useRef(onCompositionChange);
+  const onCriticTriggerRef = useRef(onCriticTrigger);
+  const onSelectIssueRef = useRef(onSelectIssue);
+  const completionControllerRef = useRef<InlineCompletionController | null>(
+    null,
+  );
   const sequenceRef = useRef(0);
   versionRef.current = baseVersion;
   onChangeRef.current = onChange;
+  completionBlockedRef.current = completionBlocked;
+  onCompletionStatusRef.current = onCompletionStatus;
+  onCompositionChangeRef.current = onCompositionChange;
+  onCriticTriggerRef.current = onCriticTrigger;
+  onSelectIssueRef.current = onSelectIssue;
+
+  useEffect(() => {
+    completionControllerRef.current?.handleBlockedChange();
+  }, [completionBlocked]);
 
   const editor = useEditor(
     {
-      extensions: [StarterKit, StableNodeId],
+      extensions: [
+        StarterKit,
+        StableNodeId,
+        CompletionDecoration.configure({
+          onAcceptFull: (completion) =>
+            completionControllerRef.current?.acceptFull(completion),
+          onAcceptWord: (completion, acceptedText, remainingText) =>
+            completionControllerRef.current?.acceptWord(
+              completion,
+              acceptedText,
+              remainingText,
+            ),
+          onDismiss: (completion) =>
+            completionControllerRef.current?.dismiss(completion),
+        }),
+        IssueGutter.configure({
+          onSelect: (issueId) => onSelectIssueRef.current(issueId),
+        }),
+      ],
       content: normalized.content,
       editorProps: {
         attributes: {
@@ -44,8 +128,41 @@ export function OpenLoopEditor({
           class: "openloop-editor",
           spellcheck: "true",
         },
+        handleDOMEvents: {
+          keydown: (view, event) => {
+            if (
+              event.key === "Enter" &&
+              view.state.selection.empty &&
+              view.state.selection.$from.parent.type.name === "paragraph" &&
+              view.state.selection.$from.parent.textContent.trim()
+            ) {
+              onCriticTriggerRef.current("paragraph_end");
+            }
+            return false;
+          },
+          compositionstart: () => {
+            onCompositionChangeRef.current(true);
+            completionControllerRef.current?.handleCompositionStart();
+            return false;
+          },
+          compositionend: () => {
+            onCompositionChangeRef.current(false);
+            completionControllerRef.current?.handleCompositionEnd();
+            return false;
+          },
+        },
       },
       onCreate: ({ editor: createdEditor }) => {
+        completionControllerRef.current = new InlineCompletionController({
+          editor: createdEditor,
+          documentId,
+          getDocumentVersion: () => versionRef.current,
+          hasFocus: () => createdEditor.isFocused,
+          isBlocked: () => completionBlockedRef.current,
+          debounceMs: __COMPLETION_DEBOUNCE_MS__,
+          onStatus: (message, durationMs) =>
+            onCompletionStatusRef.current(message, durationMs),
+        });
         if (!normalized.changed) return;
         sequenceRef.current += 1;
         const transaction = createdEditor.state.tr;
@@ -62,23 +179,106 @@ export function OpenLoopEditor({
           }),
         );
       },
+      onTransaction: ({ transaction }) => {
+        completionControllerRef.current?.handleTransaction(transaction);
+      },
+      onFocus: () => completionControllerRef.current?.handleFocus(),
+      onBlur: () => completionControllerRef.current?.handleBlur(),
+      onDestroy: () => {
+        completionControllerRef.current?.destroy();
+        completionControllerRef.current = null;
+      },
       onUpdate: ({ editor: updatedEditor, transaction }) => {
         sequenceRef.current += 1;
+        const batch = buildChangeBatch({
+          transaction,
+          currentDocument: updatedEditor.state.doc,
+          documentId,
+          baseVersion: versionRef.current,
+          clientSequence: sequenceRef.current,
+        });
         onChangeRef.current(
           JsonObjectSchema.parse(updatedEditor.getJSON()),
           updatedEditor.getText({ blockSeparator: "\n" }),
-          buildChangeBatch({
-            transaction,
-            currentDocument: updatedEditor.state.doc,
-            documentId,
-            baseVersion: versionRef.current,
-            clientSequence: sequenceRef.current,
-          }),
+          batch,
         );
+        const previousTypes = nodeTypes(transaction.before);
+        if (
+          batch.changedBlocks.some(
+            (block) =>
+              block.nodeType === "heading" &&
+              previousTypes.get(block.nodeId) !== "heading",
+          )
+        ) {
+          onCriticTriggerRef.current("heading_created");
+        }
       },
     },
     [documentId],
   );
 
+  useEffect(() => {
+    if (!editor) return;
+    setIssueGutterState(editor.view, {
+      issues,
+      ...(selectedIssueId ? { activeIssueId: selectedIssueId } : {}),
+    });
+  }, [editor, issues, selectedIssueId]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      applyOperation(operation, expectedText) {
+        if (!editor) return false;
+        let position: number | undefined;
+        let text = "";
+        editor.state.doc.descendants((node, nodePosition) => {
+          if (node.attrs.nodeId === operation.nodeId) {
+            position = nodePosition + 1;
+            text = node.textContent;
+            return false;
+          }
+        });
+        if (
+          position === undefined ||
+          operation.to > text.length ||
+          operation.from > operation.to ||
+          text.slice(operation.from, operation.to) !== expectedText
+        ) {
+          return false;
+        }
+        editor.view.dispatch(
+          editor.state.tr.insertText(
+            operation.insertText,
+            position + operation.from,
+            position + operation.to,
+          ),
+        );
+        editor.commands.focus();
+        return true;
+      },
+      focusIssue(issue) {
+        if (!editor) return false;
+        let target: number | undefined;
+        editor.state.doc.descendants((node, position) => {
+          if (node.attrs.nodeId === issue.anchor.nodeId) {
+            const quoteStart = node.textContent.indexOf(issue.anchor.quote);
+            target = position + 1 + Math.max(0, quoteStart);
+            return false;
+          }
+        });
+        if (target === undefined) return false;
+        editor.view.dispatch(
+          editor.state.tr
+            .setSelection(TextSelection.near(editor.state.doc.resolve(target)))
+            .scrollIntoView(),
+        );
+        editor.commands.focus();
+        return true;
+      },
+    }),
+    [editor],
+  );
+
   return <EditorContent editor={editor} />;
-}
+});

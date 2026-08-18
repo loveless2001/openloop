@@ -1,0 +1,139 @@
+import { randomUUID } from "node:crypto";
+
+import { ModelAdapterError } from "@openloop/model-adapters";
+import type { CriticJobRequest, TextBlockSnapshot } from "@openloop/shared";
+
+import type { CriticEventBroker } from "./critic-events.js";
+import { runCriticJob } from "./critic-service.js";
+import type { Database } from "./db/client.js";
+import type { SelectedModelAdapter } from "./models/provider.js";
+
+interface CriticJob {
+  id: string;
+  documentId: string;
+  request: CriticJobRequest;
+}
+
+export class CriticQueueFullError extends Error {
+  readonly code = "CRITIC_QUEUE_FULL";
+}
+
+const triggerPriority: Record<CriticJobRequest["trigger"], number> = {
+  idle: 0,
+  paragraph_end: 1,
+  heading_created: 2,
+  manual: 3,
+};
+
+function mergeBlocks(
+  older: TextBlockSnapshot[],
+  newer: TextBlockSnapshot[],
+): TextBlockSnapshot[] {
+  const merged = new Map(older.map((block) => [block.nodeId, block]));
+  for (const block of newer) merged.set(block.nodeId, block);
+  return [...merged.values()];
+}
+
+export class CriticQueue {
+  private activeCount = 0;
+  private readonly pending: CriticJob[] = [];
+  private readonly runningByDocument = new Map<string, CriticJob>();
+
+  constructor(
+    private readonly database: Database,
+    private readonly selectedModel: SelectedModelAdapter,
+    private readonly broker: CriticEventBroker,
+    private readonly logger?: {
+      info: (metadata: object, message: string) => void;
+    },
+  ) {}
+
+  enqueue(documentId: string, request: CriticJobRequest): string {
+    const running = this.runningByDocument.get(documentId);
+    if (running?.request.documentVersion === request.documentVersion) {
+      return running.id;
+    }
+    const queued = this.pending.find((job) => job.documentId === documentId);
+    if (queued) {
+      queued.request = {
+        ...request,
+        trigger:
+          triggerPriority[request.trigger] >
+          triggerPriority[queued.request.trigger]
+            ? request.trigger
+            : queued.request.trigger,
+        changedBlocks: mergeBlocks(
+          queued.request.changedBlocks,
+          request.changedBlocks,
+        ),
+      };
+      return queued.id;
+    }
+    if (this.pending.length >= 3) {
+      throw new CriticQueueFullError("The critic queue is full.");
+    }
+
+    const job = { id: randomUUID(), documentId, request };
+    this.pending.push(job);
+    queueMicrotask(() => this.pump());
+    return job.id;
+  }
+
+  private pump(): void {
+    while (this.activeCount < 3) {
+      const index = this.pending.findIndex(
+        (job) => !this.runningByDocument.has(job.documentId),
+      );
+      if (index < 0) return;
+      const [job] = this.pending.splice(index, 1);
+      if (!job) return;
+      this.activeCount += 1;
+      this.runningByDocument.set(job.documentId, job);
+      void this.run(job).finally(() => {
+        this.activeCount -= 1;
+        this.runningByDocument.delete(job.documentId);
+        this.pump();
+      });
+    }
+  }
+
+  private async run(job: CriticJob): Promise<void> {
+    try {
+      const persisted = await runCriticJob({
+        database: this.database,
+        selectedModel: this.selectedModel,
+        documentId: job.documentId,
+        jobId: job.id,
+        request: job.request,
+        logger: this.logger,
+      });
+      for (const result of persisted) {
+        this.broker.emit(job.documentId, {
+          event: result.kind === "created" ? "issue_created" : "issue_updated",
+          data: { issue: result.issue, jobId: job.id },
+        });
+        if (result.kind === "created" && result.issue.shownCount > 0) {
+          this.broker.emit(job.documentId, {
+            event: "issue_eligible",
+            data: { issue: result.issue, jobId: job.id },
+          });
+        }
+      }
+    } catch (error) {
+      const modelError =
+        error instanceof ModelAdapterError
+          ? error
+          : new ModelAdapterError("MODEL_UNAVAILABLE", "Critic unavailable.", {
+              cause: error,
+            });
+      this.broker.emit(job.documentId, {
+        event: "critic_error",
+        data: {
+          code: modelError.code,
+          message: modelError.message,
+          jobId: job.id,
+        },
+      });
+    }
+  }
+}

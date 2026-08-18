@@ -15,7 +15,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openloop/shared": "workspace:*"
+    "@openloop/shared": "workspace:*",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

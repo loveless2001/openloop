@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { buildServer } from "../src/app.js";
 import { readEnvironment } from "../src/config/env.js";
@@ -62,6 +63,122 @@ describe("Phase 0/1 server", () => {
     ]);
   });
 
+  it("streams mock completion SSE without persisting document content", async () => {
+    const nodeId = "1a5dafdd-b267-4d78-85e9-810b1d56c5cd";
+    const createdResponse = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Completion note",
+        contentJson: {
+          type: "doc",
+          content: [{ type: "paragraph", attrs: { nodeId } }],
+        },
+      },
+    });
+    const created = createdResponse.json();
+    const prefix = "The whole product is model agnostic";
+    const prefixHash = createHash("sha256").update(prefix).digest("hex");
+
+    const completionResponse = await server.inject({
+      method: "POST",
+      url: "/v1/completions/stream",
+      payload: {
+        requestId: "bb9952cf-f25d-42a1-a6b2-5a8f6a5c7b92",
+        documentId: created.id,
+        documentVersion: 0,
+        nodeId,
+        cursorOffset: prefix.length,
+        prefix,
+        suffix: "",
+        headingPath: [],
+        prefixHash,
+      },
+    });
+
+    expect(completionResponse.statusCode).toBe(200);
+    expect(completionResponse.headers["content-type"]).toContain(
+      "text/event-stream",
+    );
+    expect(completionResponse.body).toContain("event: delta");
+    expect(completionResponse.body).toContain("because interface");
+    expect(completionResponse.body).toContain("compatibility does");
+    expect(completionResponse.body).toContain("event: done");
+
+    const loaded = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${created.id}`,
+    });
+    expect(loaded.json().document).toMatchObject({ version: 0, plainText: "" });
+
+    const run = database.sqlite
+      .prepare(
+        "select status, provider, model, input_hash as inputHash, error_code as errorCode from model_runs where request_id = ?",
+      )
+      .get("bb9952cf-f25d-42a1-a6b2-5a8f6a5c7b92") as {
+      status: string;
+      provider: string;
+      model: string;
+      inputHash: string;
+      errorCode: string | null;
+    };
+    expect(run).toMatchObject({
+      status: "completed",
+      provider: "mock",
+      model: "mock-fast-v1",
+      errorCode: null,
+    });
+    expect(run.inputHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.inputHash).not.toContain(prefix);
+  });
+
+  it("rejects a mismatched prefix hash and accepts metadata-only interaction events", async () => {
+    const createdResponse = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Completion validation",
+        contentJson: { type: "doc", content: [] },
+      },
+    });
+    const documentId = createdResponse.json().id;
+    const requestId = "6701a052-9ed1-48bf-ab76-a1b379daee3e";
+    const nodeId = "97326b15-bab1-45fa-b5d3-65a4427a16dd";
+    const invalid = await server.inject({
+      method: "POST",
+      url: "/v1/completions/stream",
+      payload: {
+        requestId,
+        documentId,
+        documentVersion: 0,
+        nodeId,
+        cursorOffset: 3,
+        prefix: "abc",
+        suffix: "",
+        headingPath: [],
+        prefixHash: "0".repeat(64),
+      },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({
+      error: { code: "VALIDATION_ERROR" },
+    });
+
+    const event = await server.inject({
+      method: "POST",
+      url: "/v1/completion-events",
+      payload: {
+        requestId,
+        documentId,
+        documentVersion: 0,
+        nodeId,
+        event: "completion_dismissed",
+      },
+    });
+    expect(event.statusCode).toBe(202);
+    expect(event.json()).toEqual({ accepted: true });
+  });
+
   it("allows the mock provider without a key and rejects incomplete remote configuration", () => {
     expect(environment.MODEL_PROVIDER).toBe("mock");
     expect(() =>
@@ -72,6 +189,189 @@ describe("Phase 0/1 server", () => {
         MODEL_API_KEY: "",
       }),
     ).toThrow();
+  });
+
+  it("creates one anchored critic issue, deduplicates it, and persists actions", async () => {
+    const nodeId = "56fa8f60-d0d3-42cd-b6bf-3602f004486f";
+    const text =
+      "The whole product is model agnostic, so any model will work equally well.";
+    const createdResponse = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Critic note",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { nodeId },
+              content: [{ type: "text", text }],
+            },
+          ],
+        },
+      },
+    });
+    const documentId = createdResponse.json().id as string;
+    const changedBlocks = [
+      {
+        nodeId,
+        nodeType: "paragraph",
+        text,
+        previousText: "",
+        headingPath: [],
+      },
+    ];
+
+    const firstJob = await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/critic-jobs`,
+      payload: {
+        requestId: "ac962121-27c0-433d-b82e-f1600307698a",
+        documentVersion: 0,
+        trigger: "idle",
+        changedBlocks,
+      },
+    });
+    expect(firstJob.statusCode).toBe(202);
+
+    let issue: Record<string, unknown> | undefined;
+    await vi.waitFor(async () => {
+      const response = await server.inject({
+        method: "GET",
+        url: `/v1/documents/${documentId}/issues?status=open`,
+      });
+      const body = response.json();
+      expect(body.issues).toHaveLength(1);
+      issue = body.issues[0];
+    });
+    expect(issue).toMatchObject({
+      type: "ambiguity",
+      status: "open",
+      shownCount: 1,
+      anchor: {
+        nodeId,
+        quote: "any model will work equally well",
+        detached: false,
+        sourceDocumentVersion: 0,
+      },
+    });
+
+    await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/critic-jobs`,
+      payload: {
+        requestId: "f863cd13-95d3-498e-89c6-2c5f79be0aa1",
+        documentVersion: 0,
+        trigger: "manual",
+        changedBlocks,
+      },
+    });
+    await vi.waitFor(() => {
+      const count = database.sqlite
+        .prepare("select count(*) as count from issues where document_id = ?")
+        .get(documentId) as { count: number };
+      expect(count.count).toBe(1);
+      const completedRuns = database.sqlite
+        .prepare(
+          "select count(*) as count from model_runs where document_id = ? and kind = 'critic' and status = 'completed'",
+        )
+        .get(documentId) as { count: number };
+      expect(completedRuns.count).toBeGreaterThanOrEqual(2);
+    });
+
+    const issueId = String(issue?.id);
+    const actionResponse = await server.inject({
+      method: "POST",
+      url: `/v1/issues/${issueId}/actions`,
+      payload: { action: "snooze", documentVersion: 0 },
+    });
+    expect(actionResponse.statusCode).toBe(200);
+    expect(actionResponse.json().issue).toMatchObject({ status: "snoozed" });
+
+    const rewriteResponse = await server.inject({
+      method: "POST",
+      url: `/v1/issues/${issueId}/actions`,
+      payload: {
+        action: "apply_rewrite",
+        documentVersion: 0,
+        expectedAnchorQuote: "any model will work equally well",
+      },
+    });
+    expect(rewriteResponse.statusCode).toBe(200);
+    expect(rewriteResponse.json().editorOperation).toEqual({
+      nodeId,
+      from: text.indexOf("any model will work equally well"),
+      to:
+        text.indexOf("any model will work equally well") +
+        "any model will work equally well".length,
+      insertText:
+        "models can share an interface while differing in behavior and quality",
+    });
+
+    const eventResponse = await server.inject({
+      method: "GET",
+      url: `/v1/issues/${issueId}/events`,
+    });
+    expect(
+      eventResponse
+        .json()
+        .events.map((event: { action: string }) => event.action),
+    ).toEqual(["show", "snooze", "apply_rewrite"]);
+
+    const loadedResponse = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}`,
+    });
+    expect(loadedResponse.json().issues).toHaveLength(1);
+    expect(loadedResponse.json().issues[0].status).toBe("snoozed");
+  });
+
+  it("does not run the automatic critic below forty visible characters", async () => {
+    const nodeId = "65539977-9765-4105-bb49-356d54bb30d4";
+    const created = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Short note",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { nodeId },
+              content: [
+                { type: "text", text: "any model will work equally well" },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const documentId = created.json().id as string;
+    await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/critic-jobs`,
+      payload: {
+        requestId: "5aee8a72-6616-4107-8fd1-d1dcce2e770f",
+        documentVersion: 0,
+        trigger: "idle",
+        changedBlocks: [
+          {
+            nodeId,
+            nodeType: "paragraph",
+            text: "any model will work equally well",
+            headingPath: [],
+          },
+        ],
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const response = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}/issues`,
+    });
+    expect(response.json().issues).toEqual([]);
   });
 
   it("creates, loads, and saves canonical document content", async () => {

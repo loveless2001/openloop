@@ -12,6 +12,7 @@ import {
   saveDocument,
 } from "./api.js";
 import { mergeChangeBatches } from "./editor/change-tracker.js";
+import { useCriticScheduler } from "./use-critic-scheduler.js";
 
 const DOCUMENT_STORAGE_KEY = "openloop.documentId";
 
@@ -47,6 +48,7 @@ export function useDocumentSession() {
   const [version, setVersion] = useState(0);
   const [status, setStatus] = useState<SaveStatus>("loading");
   const [message, setMessage] = useState("Opening local document…");
+  const [transientStatus, setTransientStatus] = useState<string | undefined>();
 
   const documentRef = useRef<DocumentRecord | null>(null);
   const titleRef = useRef(title);
@@ -56,6 +58,7 @@ export function useDocumentSession() {
   const pendingRef = useRef<EditorChangeBatch | null>(null);
   const sequenceRef = useRef(0);
   const timerRef = useRef<number | null>(null);
+  const transientTimerRef = useRef<number | null>(null);
   const saveInFlightRef = useRef(false);
   const conflictRef = useRef(false);
   const remoteDocumentRef = useRef<DocumentRecord | null>(null);
@@ -120,8 +123,28 @@ export function useDocumentSession() {
     return () => {
       cancelled = true;
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      if (transientTimerRef.current !== null) {
+        window.clearTimeout(transientTimerRef.current);
+      }
     };
   }, []);
+
+  const reportTransientStatus = useCallback(
+    (nextMessage?: string, durationMs?: number) => {
+      if (transientTimerRef.current !== null) {
+        window.clearTimeout(transientTimerRef.current);
+        transientTimerRef.current = null;
+      }
+      setTransientStatus(nextMessage);
+      if (nextMessage && durationMs) {
+        transientTimerRef.current = window.setTimeout(() => {
+          setTransientStatus(undefined);
+          transientTimerRef.current = null;
+        }, durationMs);
+      }
+    },
+    [],
+  );
 
   flushRef.current = async () => {
     const activeDocument = documentRef.current;
@@ -193,6 +216,14 @@ export function useDocumentSession() {
     }
   };
 
+  const critic = useCriticScheduler({
+    flushDocument: () => flushRef.current(),
+    getDocument: () => documentRef.current,
+    getDocumentVersion: () => versionRef.current,
+    isBlocked: () => conflictRef.current,
+    reportStatus: reportTransientStatus,
+  });
+
   const queueEditorChange = useCallback(
     (
       content: Record<string, JsonValue>,
@@ -202,11 +233,12 @@ export function useDocumentSession() {
       contentRef.current = content;
       plainTextRef.current = plainText;
       pendingRef.current = mergeChangeBatches(pendingRef.current, batch);
+      critic.queueChange(batch);
       setStatus("dirty");
       setMessage("Unsaved changes");
       scheduleSave();
     },
-    [scheduleSave],
+    [critic, scheduleSave],
   );
 
   const updateTitle = (nextTitle: string) => {
@@ -256,11 +288,14 @@ export function useDocumentSession() {
 
   return {
     document,
-    message,
+    message: transientStatus ?? message,
     queueEditorChange,
+    reportTransientStatus,
+    requestCritic: critic.request,
     reloadSavedVersion,
     saveLocalDraftAfterConflict,
     status,
+    setCriticComposing: critic.setComposing,
     title,
     updateTitle,
     version,

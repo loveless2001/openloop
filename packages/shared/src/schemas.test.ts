@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CriticJobRequestSchema,
   CreateDocumentRequestSchema,
   EditorChangeBatchSchema,
+  IssueActionRequestSchema,
 } from "./schemas.js";
 
 describe("shared Phase 0/1 schemas", () => {
@@ -30,6 +32,31 @@ describe("shared Phase 0/1 schemas", () => {
         removedNodeIds: [],
         mergedNodeMap: {},
         reason: "typing",
+      }),
+    ).toThrow();
+  });
+
+  it("validates critic jobs and discriminated issue actions", () => {
+    const nodeId = crypto.randomUUID();
+    expect(
+      CriticJobRequestSchema.parse({
+        requestId: crypto.randomUUID(),
+        documentVersion: 2,
+        trigger: "manual",
+        changedBlocks: [
+          {
+            nodeId,
+            nodeType: "paragraph",
+            text: "A consequential claim.",
+            headingPath: [],
+          },
+        ],
+      }).trigger,
+    ).toBe("manual");
+    expect(() =>
+      IssueActionRequestSchema.parse({
+        action: "apply_rewrite",
+        documentVersion: 2,
       }),
     ).toThrow();
   });

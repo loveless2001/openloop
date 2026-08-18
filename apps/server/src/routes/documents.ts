@@ -13,6 +13,7 @@ import {
   saveDocument,
 } from "../documents.js";
 import type { Database } from "../db/client.js";
+import { IssueNotFoundError, listIssues } from "../issues.js";
 
 const DocumentParamsSchema = z.object({ documentId: z.uuid() });
 
@@ -29,7 +30,7 @@ export function registerDocumentRoutes(
     const { documentId } = DocumentParamsSchema.parse(request.params);
     return {
       document: getDocument(database, documentId),
-      issues: [],
+      issues: listIssues(database, documentId),
       preferences: [],
     };
   });
@@ -60,6 +61,15 @@ export function registerDocumentRoutes(
           message: error.message,
           requestId: request.id,
           details: { currentVersion: error.currentVersion },
+        },
+      });
+    }
+    if (error instanceof IssueNotFoundError) {
+      return reply.code(404).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          requestId: request.id,
         },
       });
     }

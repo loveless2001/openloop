@@ -30,3 +30,43 @@ Phase 0 requires SQLite migrations and the specification fixes five baseline tab
 migration therefore creates all five tables and required indexes. Phase 1 reads and writes only
 `documents`; no model, issue, scheduler, reconciliation, export, or preference behavior is
 implemented early.
+
+## 006 — Use SSE for completion streaming
+
+The preferred protocol in the specification is used: `POST /v1/completions/stream` returns SSE
+`delta`, `done`, and `error` events. The browser parses this provider-neutral stream, so switching
+model providers remains a server configuration change.
+
+## 007 — Keep prompt versions in structured model-run logs
+
+The fixed `model_runs` schema has no `prompt_version` column. Phase 2 preserves that schema and
+includes `promptVersion` in structured start/finish log metadata while persisting the specified
+provider, model, input hash, latency, status, and error code. No prompt or document text is logged.
+
+## 008 — Record completion interactions as metadata-only structured events
+
+The database specification defines an append-only table for issue events but no completion-event
+table. The browser therefore posts requested, shown, accepted, dismissed, stale, and error events
+to a metadata-only server endpoint. The server records them as structured logs without document or
+completion text. This avoids inventing an unrequested persistence table while retaining an
+observable harness event stream.
+
+## 009 — Use a bounded in-process critic queue
+
+Phase 3 uses a minimal in-process queue rather than adding another dependency. It enforces one
+active critic job per document, merges pending snapshots by stable node ID, caps the global pending
+queue at three jobs, and never cancels in-flight critique. The queue emits provider-neutral critic
+events through a document-scoped SSE broker.
+
+## 010 — Validate model anchors against canonical saved content
+
+A critic candidate is eligible only when its quote occurs in a submitted changed block and in the
+same stable node in saved TipTap JSON. Anchor offsets and surrounding context are derived from the
+canonical saved node. This keeps the model advisory and prevents client or model output from
+creating an anchor that the persisted document cannot support.
+
+## 011 — Keep applied rewrites open until reconciliation
+
+Apply rewrite validates the current persisted quote and returns a node-relative editor operation.
+It appends `apply_rewrite` history but does not mark the issue resolved. Phase 4 reconciliation will
+decide whether the resulting edit actually resolves, invalidates, or preserves the objection.

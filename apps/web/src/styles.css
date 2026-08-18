@@ -81,7 +81,6 @@ input {
 }
 
 .phase-badge {
-  justify-self: end;
   padding: 5px 10px;
   border: 1px solid #c9d8d0;
   border-radius: 999px;
@@ -91,6 +90,22 @@ input {
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.top-actions {
+  display: flex;
+  justify-self: end;
+  align-items: center;
+  gap: 10px;
+}
+
+.critique-button {
+  padding: 6px 10px;
+  border: 1px solid #b9c9c1;
+  border-radius: 6px;
+  color: #234d41;
+  background: #fffdf8;
+  cursor: pointer;
 }
 
 .workspace {
@@ -117,12 +132,40 @@ input {
 }
 
 .openloop-editor {
+  position: relative;
   min-height: 480px;
   color: #2e2a25;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 19px;
   line-height: 1.72;
   outline: none;
+}
+
+.issue-gutter-marker {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin-left: -38px;
+  transform: translateY(3px);
+  border: 1px solid #b46f36;
+  border-radius: 50%;
+  color: #754018;
+  background: #fff1df;
+  cursor: pointer;
+  font:
+    700 13px/1 system-ui,
+    sans-serif;
+}
+
+.issue-gutter-marker:focus-visible {
+  outline: 2px solid #1f5b4a;
+  outline-offset: 2px;
+}
+
+.issue-anchor-highlight {
+  border-radius: 2px;
+  background: #ffe8c8;
+  box-shadow: 0 2px 0 #b46f36;
 }
 
 .openloop-editor p {
@@ -144,13 +187,179 @@ input {
   pointer-events: none;
 }
 
+.completion-ghost {
+  color: #9b958b;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
 .issue-panel {
   display: flex;
   flex-direction: column;
-  gap: 48px;
+  gap: 22px;
   padding: 36px 30px;
   border-left: 1px solid #d5d0c5;
   background: #f7f4ed;
+}
+
+.issue-filters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #ebe7df;
+}
+
+.issue-filters button {
+  padding: 7px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: #6e675e;
+  background: transparent;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+
+.issue-filters button.active {
+  color: #173c32;
+  background: #fffdf8;
+  box-shadow: 0 1px 4px rgb(51 44 35 / 10%);
+}
+
+.issue-list {
+  display: grid;
+  gap: 8px;
+  max-height: 34vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.issue-list button {
+  display: grid;
+  width: 100%;
+  gap: 7px;
+  padding: 13px;
+  border: 1px solid #d7d0c4;
+  border-radius: 8px;
+  color: #39352f;
+  background: #fffdf8;
+  cursor: pointer;
+  text-align: left;
+}
+
+.issue-list button[aria-current="true"] {
+  border-color: #b46f36;
+  box-shadow: 0 0 0 1px #b46f36;
+}
+
+.issue-list-heading,
+.issue-list-meta {
+  display: flex;
+  justify-content: space-between;
+  color: #7b746b;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.issue-list strong {
+  line-height: 1.35;
+}
+
+.issue-list small {
+  overflow: hidden;
+  color: #71695f;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-detail {
+  position: relative;
+  padding: 18px;
+  border: 1px solid #d3c8b8;
+  border-radius: 10px;
+  background: #fffdf8;
+  box-shadow: 0 12px 32px rgb(51 44 35 / 9%);
+}
+
+.issue-detail h3 {
+  margin: 7px 22px 10px 0;
+  color: #2d2924;
+  font-family: Georgia, serif;
+  line-height: 1.35;
+}
+
+.issue-detail > p:not(.eyebrow, .issue-warning) {
+  color: #625b53;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.issue-detail blockquote {
+  margin: 14px 0;
+  padding: 10px 12px;
+  border-left: 3px solid #d59c65;
+  color: #5e554b;
+  background: #fbf4e9;
+  font:
+    italic 14px/1.45 Georgia,
+    serif;
+}
+
+.issue-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 0;
+  color: #746d64;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.issue-warning {
+  color: #8b4c2b;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.issue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 15px 0;
+}
+
+.issue-actions button {
+  padding: 7px 9px;
+  border: 1px solid #bfb5a8;
+  border-radius: 6px;
+  color: #3d3731;
+  background: #f7f4ed;
+  cursor: pointer;
+}
+
+.issue-actions button:first-child {
+  border-color: #39715f;
+  color: #fff;
+  background: #39715f;
+}
+
+.issue-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.issue-detail details {
+  color: #6e675e;
+  font-size: 12px;
+}
+
+.issue-history {
+  margin: 8px 0 0;
+  padding-left: 20px;
 }
 
 .issue-panel h2 {

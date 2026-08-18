@@ -1,9 +1,16 @@
 import {
   ApiErrorSchema,
+  CriticJobResponseSchema,
   DocumentBundleSchema,
   DocumentRecordSchema,
+  IssueActionResponseSchema,
+  IssueEventsResponseSchema,
+  IssueListResponseSchema,
   SaveDocumentResponseSchema,
+  type CriticJobRequest,
   type DocumentRecord,
+  type IssueActionRequest,
+  type IssueRecord,
   type EditorChangeBatch,
   type JsonValue,
 } from "@openloop/shared";
@@ -16,6 +23,46 @@ export class ApiClientError extends Error {
   ) {
     super(message);
   }
+}
+
+export async function submitCriticJob(
+  documentId: string,
+  input: CriticJobRequest,
+): Promise<string> {
+  const response = await fetch(`/v1/documents/${documentId}/critic-jobs`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return CriticJobResponseSchema.parse(await parseResponse(response)).jobId;
+}
+
+export async function loadIssues(
+  documentId: string,
+  statuses?: IssueRecord["status"][],
+): Promise<IssueRecord[]> {
+  const query = statuses?.length
+    ? `?status=${encodeURIComponent(statuses.join(","))}`
+    : "";
+  const response = await fetch(`/v1/documents/${documentId}/issues${query}`);
+  return IssueListResponseSchema.parse(await parseResponse(response)).issues;
+}
+
+export async function loadIssueEvents(issueId: string) {
+  const response = await fetch(`/v1/issues/${issueId}/events`);
+  return IssueEventsResponseSchema.parse(await parseResponse(response)).events;
+}
+
+export async function performIssueAction(
+  issueId: string,
+  input: IssueActionRequest,
+) {
+  const response = await fetch(`/v1/issues/${issueId}/actions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return IssueActionResponseSchema.parse(await parseResponse(response));
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
