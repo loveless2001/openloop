@@ -13,7 +13,8 @@ const tempDirectory = mkdtempSync(join(tmpdir(), "openloop-server-"));
 const environment = readEnvironment({
   NODE_ENV: "test",
   DATABASE_URL: `file:${join(tempDirectory, "test.db")}`,
-  MODEL_PROVIDER: "mock",
+  COMPLETION_PROVIDER: "mock",
+  CRITIC_PROVIDER: "mock",
 });
 let database: Database;
 let server: ReturnType<typeof buildServer>;
@@ -43,8 +44,10 @@ describe("Phase 0/1 server", () => {
     expect(modelStatus.json()).toEqual({
       provider: "mock",
       completionModel: "mock-fast-v1",
+      criticProvider: "mock",
       criticModel: "mock-smart-v1",
       mode: "offline",
+      state: "ready",
     });
 
     const tables = database.sqlite
@@ -190,14 +193,15 @@ describe("Phase 0/1 server", () => {
     expect(event.json()).toEqual({ accepted: true });
   });
 
-  it("allows the mock provider without a key and rejects incomplete remote configuration", () => {
-    expect(environment.MODEL_PROVIDER).toBe("mock");
+  it("allows local and mock providers without keys and rejects incomplete OpenAI configuration", () => {
+    expect(environment.COMPLETION_PROVIDER).toBe("mock");
+    expect(readEnvironment({}).COMPLETION_PROVIDER).toBe("ollama");
     expect(() =>
       readEnvironment({
         NODE_ENV: "test",
         DATABASE_URL: "file:./data/openloop.db",
-        MODEL_PROVIDER: "openai-compatible",
-        MODEL_API_KEY: "",
+        CRITIC_PROVIDER: "openai",
+        CRITIC_API_KEY: "",
       }),
     ).toThrow();
   });

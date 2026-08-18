@@ -10,7 +10,7 @@ import type { Database } from "./db/client.js";
 import { getDocument } from "./documents.js";
 import { listIssues, persistCriticCandidates } from "./issues.js";
 import { createModelRun, finishModelRun } from "./model-runs.js";
-import type { SelectedModelAdapter } from "./models/provider.js";
+import type { SelectedModelAdapters } from "./models/provider.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -48,7 +48,7 @@ function relevantOpenIssues(
 
 export async function runCriticJob(input: {
   database: Database;
-  selectedModel: SelectedModelAdapter;
+  selectedModel: SelectedModelAdapters;
   documentId: string;
   jobId: string;
   request: CriticJobRequest;
@@ -82,8 +82,8 @@ export async function runCriticJob(input: {
     requestId: input.request.requestId,
     documentId: input.documentId,
     kind: "critic",
-    provider: input.selectedModel.adapter.providerId,
-    model: input.selectedModel.criticModel,
+    provider: input.selectedModel.critic.adapter.providerId,
+    model: input.selectedModel.critic.model,
     inputHash,
   });
   const startedAt = performance.now();
@@ -91,8 +91,8 @@ export async function runCriticJob(input: {
     {
       modelRun: {
         requestId: input.request.requestId,
-        provider: input.selectedModel.adapter.providerId,
-        model: input.selectedModel.criticModel,
+        provider: input.selectedModel.critic.adapter.providerId,
+        model: input.selectedModel.critic.model,
         promptVersion: CRITIC_PROMPT_VERSION,
         inputHash,
       },
@@ -100,7 +100,7 @@ export async function runCriticJob(input: {
     "Critic model run started",
   );
   try {
-    const candidates = await input.selectedModel.adapter.critique(
+    const candidates = await input.selectedModel.critic.adapter.critique(
       {
         requestId: input.request.requestId,
         documentTitle: document.title,

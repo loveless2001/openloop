@@ -3,20 +3,32 @@ import { describe, expect, it } from "vitest";
 import { readEnvironment } from "./env.js";
 
 describe("model environment", () => {
-  it("accepts the standard OpenAI key and selects lightweight defaults", () => {
-    const environment = readEnvironment({
-      MODEL_PROVIDER: "openai",
-      OPENAI_API_KEY: "test-key",
-    });
+  it("defaults autocomplete to the small local model and critic to mock", () => {
+    const environment = readEnvironment({});
 
-    expect(environment.MODEL_API_KEY).toBe("test-key");
-    expect(environment.MODEL_FAST).toBe("gpt-5.6-luna");
-    expect(environment.MODEL_SMART).toBe("gpt-5.6-terra");
+    expect(environment.COMPLETION_PROVIDER).toBe("ollama");
+    expect(environment.COMPLETION_MODEL).toBe("qwen2.5:0.5b");
+    expect(environment.COMPLETION_KEEP_ALIVE).toBe("30m");
+    expect(environment.CRITIC_PROVIDER).toBe("mock");
   });
 
-  it("still allows an explicit offline mock provider", () => {
-    expect(readEnvironment({ MODEL_PROVIDER: "mock" }).MODEL_PROVIDER).toBe(
-      "mock",
-    );
+  it("accepts an independently configured remote critic", () => {
+    const environment = readEnvironment({
+      CRITIC_PROVIDER: "openai",
+      CRITIC_API_KEY: "test-key",
+    });
+
+    expect(environment.COMPLETION_PROVIDER).toBe("ollama");
+    expect(environment.CRITIC_API_KEY).toBe("test-key");
+    expect(environment.CRITIC_MODEL).toBe("gpt-5.6-terra");
+  });
+
+  it("configures each role explicitly", () => {
+    const environment = readEnvironment({
+      COMPLETION_PROVIDER: "mock",
+      CRITIC_PROVIDER: "mock",
+    });
+    expect(environment.COMPLETION_PROVIDER).toBe("mock");
+    expect(environment.CRITIC_PROVIDER).toBe("mock");
   });
 });

@@ -6,7 +6,7 @@ import type { CriticJobRequest, TextBlockSnapshot } from "@openloop/shared";
 import type { CriticEventBroker } from "./critic-events.js";
 import { runCriticJob } from "./critic-service.js";
 import type { Database } from "./db/client.js";
-import type { SelectedModelAdapter } from "./models/provider.js";
+import type { SelectedModelAdapters } from "./models/provider.js";
 
 interface CriticJob {
   id: string;
@@ -41,7 +41,7 @@ export class CriticQueue {
 
   constructor(
     private readonly database: Database,
-    private readonly selectedModel: SelectedModelAdapter,
+    private readonly selectedModel: SelectedModelAdapters,
     private readonly broker: CriticEventBroker,
     private readonly logger?: {
       info: (metadata: object, message: string) => void;

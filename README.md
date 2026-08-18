@@ -3,7 +3,7 @@
 OpenLoop is a local-first, stateful LLM co-writer harness. This repository currently implements
 Phases 0–3 from `openloop-cowriter-harness-spec.md`: workspace and persistence, editor
 persistence, inline completion, and the critic issue ledger. The current iteration also adds a
-Markdown-first file workflow and production OpenAI autocomplete configuration.
+Markdown-first file workflow and small-model local autocomplete through Ollama.
 
 The current vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
@@ -17,6 +17,7 @@ and are intentionally not implemented.
 
 - Node.js 20 or newer
 - pnpm 10
+- Ollama with `qwen2.5:0.5b` for the default local autocomplete path
 
 ## Start locally
 
@@ -28,6 +29,7 @@ cp .env.example .env
 Copy-Item .env.example .env
 
 pnpm install
+pnpm setup:ollama
 pnpm db:migrate
 pnpm dev
 ```
@@ -35,16 +37,26 @@ pnpm dev
 Open <http://127.0.0.1:5173>. The web application proxies `/v1` requests to the API at
 <http://127.0.0.1:8787>. `GET /v1/health` returns `{"status":"ok"}`.
 
-The default configuration uses the deterministic mock provider and requires no external API.
-Local state is stored in `data/openloop.db`, which is excluded from Git. The browser remembers the
-current document ID in local storage, reloads it on startup, and creates a blank document when no
-saved document exists.
+The default configuration uses the 398 MB `qwen2.5:0.5b` model through Ollama for autocomplete and
+the deterministic mock for criticism, so document text does not leave the machine. Local state is
+stored in `data/openloop.db`, which is excluded from Git. The browser remembers the current
+document ID in local storage, reloads it on startup, and creates a blank document when no saved
+document exists.
+
+`pnpm setup:ollama` verifies that the `ollama` command is installed, temporarily starts a local Ollama
+server when necessary, and pulls the configured completion model if it is missing. It reads
+`COMPLETION_PROVIDER`, `COMPLETION_BASE_URL`, and `COMPLETION_MODEL` from `.env`.
+
+Starting OpenLoop owns the remaining runtime lifecycle. Server boot probes Ollama, launches
+`ollama serve` when the configured local endpoint is unavailable, verifies the model, warms it, and
+only then exposes the API as ready. Shutdown stops Ollama only when OpenLoop started that process;
+an Ollama instance that was already running is left untouched.
 
 ## Inline completion
 
 With the editor focused, type at least three non-whitespace characters at the end of a paragraph,
-heading, or blockquote and pause for 300 ms. The deterministic mock provider streams a completion
-as ghost text without changing the document.
+heading, or blockquote and pause for 300 ms. The local Ollama model streams a completion as ghost
+text without changing the document.
 
 - `Tab` accepts the full completion.
 - `ArrowRight` accepts one word and leaves the remainder visible.
@@ -52,14 +64,22 @@ as ghost text without changing the document.
 - Typing, moving the cursor, changing the prefix, or starting IME composition invalidates the
   active request.
 
-For real autocomplete with OpenAI, copy `.env.openai.example` to `.env`, set
-`OPENAI_API_KEY`, and restart the server. The production defaults are `gpt-5.6-luna` for fast,
-low-reasoning completion and `gpt-5.6-terra` for the smarter critic. The key remains server-side,
-and the header reports the active provider and fast model. Account model access can vary.
+Completion and criticism have separate provider settings. The default `.env.example` routes only
+completion to `http://127.0.0.1:11434/v1` with `COMPLETION_PROVIDER=ollama` and
+`COMPLETION_MODEL=qwen2.5:0.5b`. Use `COMPLETION_PROVIDER=mock` if you want the deterministic test
+completion instead. The header reports the active autocomplete model.
 
-To use another OpenAI-compatible endpoint instead, set `MODEL_PROVIDER=openai-compatible`,
-`MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_FAST`, `MODEL_SMART`, and
-`MODEL_SUPPORTS_JSON_SCHEMA`. The same adapter boundary supports both paths.
+The server warms the model without generating text, then uses Ollama's native streaming API with a
+fixed 2K context for every suggestion. `COMPLETION_KEEP_ALIVE=30m` keeps the model resident between
+typing bursts and can be increased on a dedicated workstation. See
+[the local benchmark](docs/OLLAMA-BENCHMARK.md) for cold-start, steady-state, and end-to-end
+measurements.
+
+The critic can remain mocked or use an independent OpenAI/OpenAI-compatible backend. Copy
+`.env.openai.example` to pair local autocomplete with an OpenAI critic, set `CRITIC_API_KEY`, and
+restart the server. Generic backends use `CRITIC_PROVIDER=openai-compatible` plus
+`CRITIC_BASE_URL`, `CRITIC_API_KEY`, `CRITIC_MODEL`, and
+`CRITIC_SUPPORTS_JSON_SCHEMA`. Provider credentials remain server-side.
 
 ## Markdown files and toolbar
 

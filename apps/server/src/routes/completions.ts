@@ -14,7 +14,7 @@ import type { FastifyInstance } from "fastify";
 import type { Database } from "../db/client.js";
 import { getDocument } from "../documents.js";
 import { createCompletionModelRun, finishModelRun } from "../model-runs.js";
-import type { SelectedModelAdapter } from "../models/provider.js";
+import type { SelectedModelAdapters } from "../models/provider.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -27,7 +27,7 @@ function sse(event: string, data: unknown): string {
 export function registerCompletionRoutes(
   server: FastifyInstance,
   database: Database,
-  selectedModel: SelectedModelAdapter,
+  selectedModel: SelectedModelAdapters,
 ): void {
   server.post("/v1/completions/stream", async (request, reply) => {
     const input = CompletionStreamRequestSchema.parse(request.body);
@@ -54,8 +54,8 @@ export function registerCompletionRoutes(
     const runId = createCompletionModelRun(database, {
       requestId: input.requestId,
       documentId: input.documentId,
-      provider: selectedModel.adapter.providerId,
-      model: selectedModel.completionModel,
+      provider: selectedModel.completion.adapter.providerId,
+      model: selectedModel.completion.model,
       inputHash,
     });
     const startedAt = performance.now();
@@ -70,8 +70,8 @@ export function registerCompletionRoutes(
       {
         modelRun: {
           requestId: input.requestId,
-          provider: selectedModel.adapter.providerId,
-          model: selectedModel.completionModel,
+          provider: selectedModel.completion.adapter.providerId,
+          model: selectedModel.completion.model,
           promptVersion: COMPLETION_PROMPT_VERSION,
           inputHash,
         },
@@ -81,7 +81,7 @@ export function registerCompletionRoutes(
 
     async function* streamEvents() {
       try {
-        for await (const chunk of selectedModel.adapter.streamCompletion(
+        for await (const chunk of selectedModel.completion.adapter.streamCompletion(
           {
             requestId: input.requestId,
             documentTitle: document.title,

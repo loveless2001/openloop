@@ -78,6 +78,7 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
             { role: "system", content: completionSystemPrompt },
             { role: "user", content: buildCompletionPrompt(input) },
           ],
+          temperature: 0.2,
           ...(this.config.openAIRequestParameters
             ? {
                 max_completion_tokens: input.maxOutputTokens,
@@ -175,7 +176,9 @@ export class OpenAICompatibleAdapter implements ModelAdapter {
 
   private headers(): HeadersInit {
     return {
-      authorization: `Bearer ${this.config.apiKey}`,
+      ...(this.config.apiKey
+        ? { authorization: `Bearer ${this.config.apiKey}` }
+        : {}),
       "content-type": "application/json",
     };
   }

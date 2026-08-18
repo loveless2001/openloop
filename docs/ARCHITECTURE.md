@@ -32,14 +32,23 @@ the specification so later vertical slices can add behavior without replacing pe
 remain unused until Phase 5.
 
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
-mock implementation, and OpenAI/OpenAI-compatible implementation.
+mock implementation, and Ollama/OpenAI-compatible implementation.
 
-The server selects one `ModelAdapter` at startup. `/v1/completions/stream` hashes request context,
-persists model-run metadata, and emits provider-neutral SSE `delta`, `done`, or `error` events. The
-mock adapter is deterministic. The OpenAI-compatible adapter owns provider request formatting,
-stream parsing, timeouts, JSON-schema handling, and one repair attempt for malformed structured
-outputs. The OpenAI configuration uses `gpt-5.6-luna` with no reasoning effort for latency-sensitive
-autocomplete and leaves the smarter critic model independently configurable.
+The server selects separate completion and critic adapters at startup.
+`/v1/completions/stream` hashes request context, persists model-run metadata, and emits
+provider-neutral SSE `delta`, `done`, or `error` events. By default, autocomplete calls Ollama's
+native streaming API with `qwen2.5:0.5b`, a fixed 2K context, and a configurable keep-alive; the
+critic remains deterministic mock. A
+smart OpenAI or compatible critic can be enabled independently without moving autocomplete or its
+keystroke context off-machine. The dedicated Ollama adapter owns low-latency completion and model
+residency, while the compatible critic adapter owns request formatting, timeouts, JSON-schema
+handling, and one repair attempt for malformed structured outputs.
+
+For a local Ollama endpoint, server readiness includes the model runtime. Startup reuses an
+existing Ollama server or launches `ollama serve`, verifies that the configured completion model is
+installed, and completes a no-output warm-up before Fastify begins listening. The server records
+process ownership and stops Ollama on shutdown only when it launched that process. Model downloads
+remain the explicit responsibility of `pnpm setup:ollama`.
 
 Critic jobs use a bounded in-process queue with at most one active job per document and at most
 three queued jobs globally. Pending jobs for one document merge changed blocks by stable node ID.

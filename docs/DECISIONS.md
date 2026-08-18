@@ -81,9 +81,16 @@ providing a normal Markdown workflow.
 
 ## 013 — Give autocomplete a dedicated lightweight production model
 
-`MODEL_PROVIDER=openai` is a first-class configuration rather than an undocumented generic
-endpoint recipe. It defaults completion to `gpt-5.6-luna`, sends Chat Completions streaming with
-`reasoning_effort: none`, and keeps the smart critic independently configurable as
-`gpt-5.6-terra`. The deterministic mock remains the default in `.env.example` so a fresh clone is
-runnable without credentials; `.env.openai.example` is the production-model template. Generic
-OpenAI-compatible endpoints retain the legacy token parameter for broader compatibility.
+Autocomplete and criticism select independent adapters. The default completion provider is local
+Ollama with the installed `qwen2.5:0.5b` model; its 398 MB footprint is appropriate for frequent,
+short, latency-sensitive suggestions. The default critic remains deterministic mock. An optional
+OpenAI or compatible smart critic can therefore inspect changed blocks without becoming a hard
+dependency for autocomplete. Configuration uses explicit `COMPLETION_*` and `CRITIC_*` variables;
+there is no shared or legacy provider path.
+
+## 014 — Make local model readiness part of application boot
+
+`pnpm setup:ollama` installs the configured Ollama model, while normal server boot manages the serving
+process. A local Ollama endpoint is probed, started when absent, checked for the configured model,
+and warmed before Fastify reports readiness. OpenLoop terminates Ollama only when it owns the child
+process. This makes `pnpm dev` self-starting without hiding model downloads inside routine boot.

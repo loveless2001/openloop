@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.15.0",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @openloop/server dev\" \"pnpm --filter @openloop/web dev\"",
+    "setup:ollama": "node scripts/setup-ollama.mjs",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",

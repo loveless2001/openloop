@@ -14,6 +14,7 @@ export function App() {
   const session = useDocumentSession();
   const editorRef = useRef<OpenLoopEditorHandle>(null);
   const [modelLabel, setModelLabel] = useState("Checking model…");
+  const [completionReady, setCompletionReady] = useState(false);
   const ledger = useIssueLedger({
     documentId: session.document?.id,
     documentVersion: session.version,
@@ -22,20 +23,42 @@ export function App() {
 
   useEffect(() => {
     let active = true;
-    void loadModelStatus()
-      .then((status) => {
+    let timer: number | undefined;
+    const check = async () => {
+      try {
+        const status = await loadModelStatus();
         if (!active) return;
-        setModelLabel(
+        setCompletionReady(status.state === "ready");
+        const providerLabel =
           status.mode === "offline"
             ? "Mock · offline"
-            : `${status.provider} · ${status.completionModel}`,
+            : status.mode === "local"
+              ? `Local · ${status.completionModel}`
+              : `${status.provider} · ${status.completionModel}`;
+        setModelLabel(
+          status.state === "ready"
+            ? providerLabel
+            : status.state === "warming"
+              ? `${providerLabel} · warming`
+              : `${providerLabel} · unavailable`,
         );
-      })
-      .catch(() => {
-        if (active) setModelLabel("Model unavailable");
-      });
+        if (status.state !== "ready") {
+          timer = window.setTimeout(
+            () => void check(),
+            status.state === "warming" ? 1_000 : 3_000,
+          );
+        }
+      } catch {
+        if (active) {
+          setCompletionReady(false);
+          setModelLabel("Model unavailable");
+        }
+      }
+    };
+    void check();
     return () => {
       active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 
@@ -123,7 +146,9 @@ export function App() {
           <div className="paper">
             <OpenLoopEditor
               baseVersion={session.version}
-              completionBlocked={session.status === "conflict"}
+              completionBlocked={
+                session.status === "conflict" || !completionReady
+              }
               content={session.document.contentJson}
               documentId={session.document.id}
               issues={ledger.issues}

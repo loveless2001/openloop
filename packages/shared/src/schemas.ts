@@ -88,8 +88,10 @@ export const HealthResponseSchema = z.object({
 export const ModelStatusResponseSchema = z.object({
   provider: z.string().min(1),
   completionModel: z.string().min(1),
+  criticProvider: z.string().min(1),
   criticModel: z.string().min(1),
-  mode: z.enum(["offline", "remote"]),
+  mode: z.enum(["offline", "local", "remote"]),
+  state: z.enum(["ready", "warming", "unavailable"]),
 });
 
 export type ModelStatusResponse = z.infer<typeof ModelStatusResponseSchema>;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { MockModelAdapter } from "./mock-adapter.js";
+import { OllamaModelAdapter } from "./ollama-adapter.js";
 import { OpenAICompatibleAdapter } from "./openai-compatible-adapter.js";
 
 function adapterWithFetch(fetchImplementation: typeof fetch) {
@@ -67,6 +68,121 @@ describe("MockModelAdapter", () => {
     await expect(iterator.next()).rejects.toMatchObject({
       code: "MODEL_ABORTED",
     });
+  });
+});
+
+describe("OllamaModelAdapter", () => {
+  it("warms the same model and context used for completion", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Promise.resolve(Response.json({ done: true })),
+    );
+    const adapter = new OllamaModelAdapter({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "qwen2.5:0.5b",
+      keepAlive: "30m",
+      contextTokens: 2_048,
+      fetchImplementation,
+    });
+
+    await adapter.warmup();
+
+    expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:11434/api/generate",
+    );
+    expect(
+      JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      model: "qwen2.5:0.5b",
+      prompt: "",
+      stream: false,
+      keep_alive: "30m",
+      options: { num_ctx: 2_048, num_predict: 0 },
+    });
+  });
+
+  it("streams native Ollama chat chunks and refreshes residency", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            '{"message":{"content":" hello"},"done":false}\n' +
+              '{"message":{"content":" world"},"done":false}\n' +
+              '{"message":{"content":""},"done":true}\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Promise.resolve(new Response(stream, { status: 200 })),
+    );
+    const adapter = new OllamaModelAdapter({
+      baseUrl: "http://127.0.0.1:11434/v1",
+      model: "qwen2.5:0.5b",
+      keepAlive: "30m",
+      contextTokens: 2_048,
+      fetchImplementation,
+    });
+    const chunks: string[] = [];
+
+    for await (const chunk of adapter.streamCompletion(
+      completionInput,
+      new AbortController().signal,
+    )) {
+      chunks.push(chunk.textDelta);
+    }
+
+    expect(chunks.join("")).toBe(" hello world");
+    expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
+      "http://127.0.0.1:11434/api/chat",
+    );
+    expect(
+      JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      model: "qwen2.5:0.5b",
+      stream: true,
+      keep_alive: "30m",
+      options: {
+        num_ctx: 2_048,
+        num_predict: 60,
+        temperature: 0.2,
+        stop: ["\n\n"],
+      },
+    });
+  });
+
+  it("removes a repeated prefix before exposing a suggestion", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            '{"message":{"content":"The harness"},"done":false}\n' +
+              '{"message":{"content":" is model agnostic"},"done":false}\n' +
+              '{"message":{"content":" because adapters isolate providers."},"done":false}\n' +
+              '{"message":{"content":""},"done":true}\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    const adapter = new OllamaModelAdapter({
+      baseUrl: "http://127.0.0.1:11434",
+      model: "qwen2.5:0.5b",
+      keepAlive: "30m",
+      fetchImplementation: vi.fn<typeof fetch>(async () =>
+        Promise.resolve(new Response(stream, { status: 200 })),
+      ),
+    });
+    const chunks: string[] = [];
+
+    for await (const chunk of adapter.streamCompletion(
+      completionInput,
+      new AbortController().signal,
+    )) {
+      chunks.push(chunk.textDelta);
+    }
+
+    expect(chunks.join("")).toBe(" because adapters isolate providers.");
   });
 });
 
