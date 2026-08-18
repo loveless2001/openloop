@@ -1,0 +1,29 @@
+{
+  "name": "openloop",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @openloop/server dev\" \"pnpm --filter @openloop/web dev\"",
+    "build": "pnpm -r build",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "playwright test",
+    "db:generate": "pnpm --filter @openloop/server db:generate",
+    "db:migrate": "pnpm --filter @openloop/server db:migrate",
+    "db:reset": "pnpm --filter @openloop/server db:reset",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@playwright/test": "^1.55.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0"
+  }
+}

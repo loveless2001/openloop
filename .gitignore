@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.env
+data/*
+!data/.gitkeep
+playwright-report/
+test-results/
+*.tsbuildinfo
