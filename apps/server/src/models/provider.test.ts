@@ -25,4 +25,10 @@ describe("model role selection", () => {
     expect(selected.critic.adapter.providerId).toBe("openai");
     expect(selected.critic.model).toBe("gpt-5.6-terra");
   });
+
+  it("requires a server-owned adapter for the CLI critic", () => {
+    expect(() =>
+      selectModelAdapters(readEnvironment({ CRITIC_PROVIDER: "cli-agent" })),
+    ).toThrow("server-owned adapter");
+  });
 });

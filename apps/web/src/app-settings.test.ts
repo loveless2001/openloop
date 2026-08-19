@@ -31,6 +31,7 @@ describe("app settings", () => {
     expect(loadAppSettings(storage)).toMatchObject({
       criticIdleDelayMs: 10_000,
       criticWordThreshold: 250,
+      manualCriticWordLimit: 1_000,
       criticIdleEnabled: true,
       criticParagraphEndEnabled: true,
       criticWordThresholdEnabled: true,
@@ -42,11 +43,13 @@ describe("app settings", () => {
       ...DEFAULT_APP_SETTINGS,
       criticIdleDelayMs: 20_000,
       criticWordThreshold: 400,
+      manualCriticWordLimit: 1_500,
     });
 
     expect(loadAppSettings(storage)).toMatchObject({
       criticIdleDelayMs: 20_000,
       criticWordThreshold: 400,
+      manualCriticWordLimit: 1_500,
     });
   });
 

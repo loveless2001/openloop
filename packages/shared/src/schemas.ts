@@ -26,6 +26,8 @@ export const TextBlockSnapshotSchema = z.object({
   headingPath: z.array(z.string()),
   startOffset: z.number().int().nonnegative().optional(),
   endOffset: z.number().int().nonnegative().optional(),
+  selectionStart: z.number().int().nonnegative().optional(),
+  selectionEnd: z.number().int().nonnegative().optional(),
 });
 
 export type TextBlockSnapshot = z.infer<typeof TextBlockSnapshotSchema>;
@@ -95,6 +97,28 @@ export const ModelStatusResponseSchema = z.object({
 });
 
 export type ModelStatusResponse = z.infer<typeof ModelStatusResponseSchema>;
+
+export const CriticAgentProcessStatusSchema = z.object({
+  state: z.enum(["unsupported", "unavailable", "stopped", "running"]),
+  agent: z.enum(["codex", "claude"]),
+  sessionName: z.literal("openloop-critic"),
+  attachCommand: z.literal("tmux attach -t openloop-critic"),
+  message: z.string().min(1),
+});
+
+export type CriticAgentProcessStatus = z.infer<
+  typeof CriticAgentProcessStatusSchema
+>;
+
+export const CriticAgentStatusResponseSchema =
+  CriticAgentProcessStatusSchema.extend({
+    bridgeState: z.enum(["inactive", "idle", "queued", "busy"]),
+    pendingJobs: z.number().int().nonnegative(),
+  });
+
+export type CriticAgentStatusResponse = z.infer<
+  typeof CriticAgentStatusResponseSchema
+>;
 
 export const IssueType = z.enum([
   "unsupported_claim",
@@ -228,11 +252,23 @@ export const CriticTriggerSchema = z.enum([
 
 export type CriticTrigger = z.infer<typeof CriticTriggerSchema>;
 
+export const CriticScopeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("changes") }),
+  z.object({
+    kind: z.literal("selection"),
+    source: z.enum(["user", "completion"]),
+    wordCount: z.number().int().positive(),
+  }),
+]);
+
+export type CriticScope = z.infer<typeof CriticScopeSchema>;
+
 export const CriticJobRequestSchema = z.object({
   requestId: z.uuid(),
   documentVersion: z.number().int().nonnegative(),
   trigger: CriticTriggerSchema,
-  changedBlocks: z.array(TextBlockSnapshotSchema).max(100),
+  scope: CriticScopeSchema,
+  changedBlocks: z.array(TextBlockSnapshotSchema).min(1).max(250),
 });
 
 export type CriticJobRequest = z.infer<typeof CriticJobRequestSchema>;
@@ -249,6 +285,99 @@ export const IssueListResponseSchema = z.object({
 export const IssueEventsResponseSchema = z.object({
   events: z.array(IssueEventRecordSchema),
 });
+
+export const IssueChatStateSchema = z.enum([
+  "idle",
+  "waiting_on_critic",
+  "waiting_on_user",
+  "error",
+]);
+
+export const IssueChatThreadSchema = z.object({
+  issueId: z.uuid(),
+  documentId: z.uuid(),
+  state: IssueChatStateSchema,
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export type IssueChatThread = z.infer<typeof IssueChatThreadSchema>;
+
+export const IssueChatAttachmentInputSchema = z.object({
+  source: z.enum(["user", "completion"]),
+  text: z.string().min(1).max(60_000),
+  wordCount: z.number().int().positive().max(20_000),
+  blocks: z.array(TextBlockSnapshotSchema).min(1).max(250),
+});
+
+export type IssueChatAttachmentInput = z.infer<
+  typeof IssueChatAttachmentInputSchema
+>;
+
+export const IssueChatAttachmentSchema = IssueChatAttachmentInputSchema.extend({
+  id: z.uuid(),
+});
+
+export type IssueChatAttachment = z.infer<typeof IssueChatAttachmentSchema>;
+
+export const IssueChatMessageSchema = z.object({
+  id: z.uuid(),
+  issueId: z.uuid(),
+  role: z.enum(["user", "critic"]),
+  kind: z.enum(["message", "clarification"]),
+  content: z.string().max(4_000),
+  attachments: z.array(IssueChatAttachmentSchema).max(8),
+  createdAt: z.iso.datetime(),
+});
+
+export type IssueChatMessage = z.infer<typeof IssueChatMessageSchema>;
+
+export const IssueChatResponseSchema = z.object({
+  thread: IssueChatThreadSchema,
+  messages: z.array(IssueChatMessageSchema),
+});
+
+export const IssueChatSendRequestSchema = z
+  .object({
+    requestId: z.uuid(),
+    documentVersion: z.number().int().nonnegative(),
+    content: z.string().trim().max(4_000),
+    attachments: z.array(IssueChatAttachmentInputSchema).max(8).default([]),
+  })
+  .refine(
+    (value) => value.content.length > 0 || value.attachments.length > 0,
+    "A chat message needs text or an attachment.",
+  )
+  .refine(
+    (value) =>
+      value.attachments.reduce(
+        (total, attachment) => total + attachment.wordCount,
+        0,
+      ) <= 20_000,
+    "Issue-chat attachments cannot exceed 20,000 words in one turn.",
+  )
+  .refine(
+    (value) =>
+      value.attachments.reduce(
+        (total, attachment) => total + attachment.text.length,
+        0,
+      ) <= 120_000,
+    "Issue-chat attachments cannot exceed 120,000 characters in one turn.",
+  );
+
+export type IssueChatSendRequest = z.infer<typeof IssueChatSendRequestSchema>;
+
+export const IssueChatSendResponseSchema = z.object({
+  thread: IssueChatThreadSchema,
+  message: IssueChatMessageSchema,
+});
+
+export const IssueChatReplySchema = z.object({
+  kind: z.enum(["message", "clarification"]),
+  content: z.string().trim().min(1).max(4_000),
+});
+
+export type IssueChatReply = z.infer<typeof IssueChatReplySchema>;
 
 export const IssueActionRequestSchema = z.discriminatedUnion("action", [
   z.object({

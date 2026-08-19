@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_APP_SETTINGS, type AppSettings } from "./app-settings.js";
+import type { EditorCriticSelection } from "./editor/critic-selection.js";
 import { countWords, useCriticScheduler } from "./use-critic-scheduler.js";
 
 const documentId = "8818261b-5a2b-49da-ab1e-274f51ce251b";
@@ -149,6 +150,78 @@ describe("critic scheduler preferences", () => {
       JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
       trigger: "word_threshold",
+    });
+
+    await act(async () => root.unmount());
+  });
+
+  it("submits highlighted text as an explicit selection scope without pending edits", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async () =>
+      Response.json({ jobId: crypto.randomUUID(), status: "queued" }),
+    );
+    globalThis.fetch = fetchImplementation;
+    let request:
+      | ((trigger: "manual", selection: EditorCriticSelection) => void)
+      | undefined;
+    const flushDocument = vi.fn(async () => undefined);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function Harness() {
+      const scheduler = useCriticScheduler({
+        settings: DEFAULT_APP_SETTINGS,
+        flushDocument,
+        getDocument: () => ({
+          id: documentId,
+          title: "Draft",
+          contentJson: { type: "doc" },
+          plainText: "A focused claim",
+          version: 3,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }),
+        getDocumentVersion: () => 3,
+        isBlocked: () => false,
+        reportStatus: () => undefined,
+      });
+      useEffect(() => {
+        request = scheduler.request;
+      }, [scheduler.request]);
+      return null;
+    }
+
+    await act(async () => root.render(createElement(Harness)));
+    await act(async () => {
+      request?.("manual", {
+        blocks: [
+          {
+            nodeId,
+            nodeType: "paragraph",
+            text: "focused claim",
+            headingPath: [],
+            selectionStart: 2,
+            selectionEnd: 15,
+          },
+        ],
+        from: 3,
+        source: "completion",
+        text: "focused claim",
+        to: 16,
+        wordCount: 2,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(flushDocument).toHaveBeenCalledOnce();
+    expect(fetchImplementation).toHaveBeenCalledOnce();
+    expect(
+      JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      documentVersion: 3,
+      trigger: "manual",
+      scope: { kind: "selection", source: "completion", wordCount: 2 },
+      changedBlocks: [{ text: "focused claim" }],
     });
 
     await act(async () => root.unmount());

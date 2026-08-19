@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const APP_SETTINGS_STORAGE_KEY = "openloop.appSettings.v2";
+export const APP_SETTINGS_STORAGE_KEY = "openloop.appSettings.v3";
 
 export const AppSettingsSchema = z.object({
   dictionaryEnabled: z.boolean(),
@@ -18,6 +18,7 @@ export const AppSettingsSchema = z.object({
   criticHeadingCreatedEnabled: z.boolean(),
   criticWordThresholdEnabled: z.boolean(),
   criticWordThreshold: z.number().int().min(50).max(5_000),
+  manualCriticWordLimit: z.number().int().min(100).max(20_000),
   completionDebounceMs: z.number().int().min(100).max(5_000),
   autosaveDebounceMs: z.number().int().min(250).max(10_000),
 });
@@ -33,6 +34,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   criticHeadingCreatedEnabled: true,
   criticWordThresholdEnabled: true,
   criticWordThreshold: 250,
+  manualCriticWordLimit: 1_000,
   completionDebounceMs: 300,
   autosaveDebounceMs: 750,
 };

@@ -10,7 +10,7 @@ export function createModelRun(
   input: {
     requestId: string;
     documentId?: string;
-    kind: "completion" | "critic" | "reconcile" | "repair";
+    kind: "completion" | "critic" | "critic_chat" | "reconcile" | "repair";
     provider: string;
     model: string;
     inputHash: string;

@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { loadIssueEvents, loadIssues, performIssueAction } from "./api.js";
+import { criticErrorMessage } from "./critic-error.js";
 
 const CRITIC_EVENTS = [
   "issue_created",
@@ -92,8 +93,11 @@ export function useIssueLedger(input: {
           }
         });
       }
-      eventSource.addEventListener("critic_error", () => {
-        statusRef.current("Critic unavailable", 2_500);
+      eventSource.addEventListener("critic_error", (event) => {
+        statusRef.current(
+          criticErrorMessage((event as MessageEvent).data),
+          5_000,
+        );
       });
       eventSource.onerror = () => {
         eventSource?.close();
@@ -138,7 +142,9 @@ export function useIssueLedger(input: {
     async (
       issue: IssueRecord,
       action: IssueActionRequest["action"],
-    ): Promise<EditorOperation | undefined> => {
+    ): Promise<
+      { editorOperation?: EditorOperation; issue: IssueRecord } | undefined
+    > => {
       setActionPending(true);
       try {
         const result = await performIssueAction(
@@ -155,7 +161,12 @@ export function useIssueLedger(input: {
           result.issue,
           ...current.filter((entry) => entry.id !== result.issue.id),
         ]);
-        return result.editorOperation;
+        return {
+          issue: result.issue,
+          ...(result.editorOperation
+            ? { editorOperation: result.editorOperation }
+            : {}),
+        };
       } catch (error) {
         statusRef.current(
           error instanceof Error ? error.message : "Issue action failed.",

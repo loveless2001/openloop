@@ -75,6 +75,7 @@ describe("completion decoration", () => {
     );
     expect(press(editor, "Tab")).toBe(true);
     expect(editor.getText()).toBe("abc ghost text");
+    expect(editor.state.selection).toMatchObject({ from: 4, to: 15 });
     expect(completionDecorationKey.getState(editor.state)).toBeNull();
     expect(onAcceptFull).toHaveBeenCalledOnce();
     editor.destroy();
@@ -138,6 +139,7 @@ describe("completion decoration", () => {
 
     expect(press(editor, "Tab")).toBe(true);
     expect(editor.getText()).toBe("by the way");
+    expect(editor.state.selection).toMatchObject({ from: 1, to: 11 });
     expect(onAcceptFull).toHaveBeenCalledOnce();
     editor.destroy();
   });

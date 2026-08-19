@@ -1,4 +1,4 @@
-import type { IssueEventRecord, IssueRecord } from "@openloop/shared";
+import type { IssueRecord } from "@openloop/shared";
 import { useMemo, useState } from "react";
 
 type Filter = "open" | "resolved" | "dismissed";
@@ -14,13 +14,7 @@ function label(value: string): string {
 }
 
 export function IssuePanel(props: {
-  actionPending: boolean;
-  events: IssueEventRecord[];
   issues: IssueRecord[];
-  onAction: (
-    issue: IssueRecord,
-    action: "apply_rewrite" | "snooze" | "dismiss" | "resolve" | "reopen",
-  ) => void;
   onSelect: (issue?: IssueRecord) => void;
   selectedIssue?: IssueRecord;
 }) {
@@ -84,97 +78,6 @@ export function IssuePanel(props: {
           ))}
         </ul>
       )}
-
-      {props.selectedIssue ? (
-        <section className="issue-detail" aria-label="Selected issue">
-          <button
-            aria-label="Close issue details"
-            className="issue-close"
-            onClick={() => props.onSelect()}
-            type="button"
-          >
-            ×
-          </button>
-          <p className="eyebrow">{label(props.selectedIssue.type)}</p>
-          <h3>{props.selectedIssue.question}</h3>
-          <p>{props.selectedIssue.rationale}</p>
-          <blockquote>{props.selectedIssue.anchor.quote}</blockquote>
-          {props.selectedIssue.anchor.detached ? (
-            <p className="issue-warning">
-              Anchor detached from the current text.
-            </p>
-          ) : null}
-          <div className="issue-actions">
-            {props.selectedIssue.suggestedRewrite &&
-            !props.selectedIssue.anchor.detached &&
-            ["open", "snoozed", "needs_review"].includes(
-              props.selectedIssue.status,
-            ) ? (
-              <button
-                disabled={props.actionPending}
-                onClick={() =>
-                  props.onAction(props.selectedIssue!, "apply_rewrite")
-                }
-                type="button"
-              >
-                Apply rewrite
-              </button>
-            ) : null}
-            {["open", "snoozed", "needs_review"].includes(
-              props.selectedIssue.status,
-            ) ? (
-              <>
-                <button
-                  disabled={props.actionPending}
-                  onClick={() => props.onAction(props.selectedIssue!, "snooze")}
-                  type="button"
-                >
-                  Later
-                </button>
-                <button
-                  disabled={props.actionPending}
-                  onClick={() =>
-                    props.onAction(props.selectedIssue!, "dismiss")
-                  }
-                  type="button"
-                >
-                  Dismiss
-                </button>
-                <button
-                  disabled={props.actionPending}
-                  onClick={() =>
-                    props.onAction(props.selectedIssue!, "resolve")
-                  }
-                  type="button"
-                >
-                  Resolve
-                </button>
-              </>
-            ) : ["resolved", "dismissed"].includes(
-                props.selectedIssue.status,
-              ) ? (
-              <button
-                disabled={props.actionPending}
-                onClick={() => props.onAction(props.selectedIssue!, "reopen")}
-                type="button"
-              >
-                Reopen
-              </button>
-            ) : null}
-          </div>
-          <details>
-            <summary>History ({props.events.length})</summary>
-            <ol className="issue-history">
-              {props.events.map((event) => (
-                <li key={event.id}>
-                  {label(event.action)} ·{" "}
-                  {new Date(event.createdAt).toLocaleTimeString()}
-                </li>
-              ))}
-            </ol>
-          </details>
-        </section>
-      ) : null}
     </aside>
   );
 }

@@ -13,6 +13,7 @@ const ProviderSchema = z.enum([
   "openai",
   "openai-compatible",
 ]);
+const CriticProviderSchema = z.union([ProviderSchema, z.literal("cli-agent")]);
 
 const EnvironmentSchema = z
   .object({
@@ -30,11 +31,19 @@ const EnvironmentSchema = z
     COMPLETION_API_KEY: z.string().default(""),
     COMPLETION_MODEL: z.string().min(1).default("qwen2.5:0.5b"),
     COMPLETION_KEEP_ALIVE: z.string().min(1).default("30m"),
-    CRITIC_PROVIDER: ProviderSchema.default("mock"),
+    CRITIC_PROVIDER: CriticProviderSchema.default("mock"),
     CRITIC_BASE_URL: z.url().default("http://127.0.0.1:11434/v1"),
     CRITIC_API_KEY: z.string().default(""),
     CRITIC_MODEL: z.string().min(1).default("gpt-5.6-terra"),
     CRITIC_SUPPORTS_JSON_SCHEMA: booleanFromString.default(false),
+    CRITIC_AGENT: z.enum(["codex", "claude"]).default("codex"),
+    CRITIC_AGENT_COMMAND: z.string().trim().default(""),
+    CRITIC_AGENT_JOB_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(30_000)
+      .max(900_000)
+      .default(300_000),
     CAPTURE_TRAINING_TRACES: booleanFromString.default(false),
     TRAINING_TRACE_PATH: z
       .string()

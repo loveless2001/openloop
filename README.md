@@ -18,6 +18,7 @@ and are intentionally not implemented.
 - Node.js 20 or newer
 - pnpm 10
 - Ollama with `qwen2.5:0.5b` for the default local autocomplete path
+- Linux, tmux, and an authenticated Codex or Claude CLI when using `CRITIC_PROVIDER=cli-agent`
 
 ## Start locally
 
@@ -66,7 +67,9 @@ text without changing the document.
 
 The complete streamed suggestion remains visible as ghost text. A compact action hint beside it
 offers clickable Accept and Reject controls with `Tab` and `Esc` tooltips; `ArrowRight` remains the
-one-word acceptance shortcut.
+one-word acceptance shortcut. Accepting a full suggestion selects the inserted text and opens a
+small **Critique / Keep** toolbar, so generated prose is immediately visible and reviewable rather
+than silently becoming ordinary text.
 
 The browser-local personal dictionary runs before the model. Add plain names, terms, or frequent
 phrases in **Settings**, one per line, to complete them from a partial suffix. Add abbreviation
@@ -89,6 +92,28 @@ The critic can remain mocked or use an independent OpenAI/OpenAI-compatible back
 restart the server. Generic backends use `CRITIC_PROVIDER=openai-compatible` plus
 `CRITIC_BASE_URL`, `CRITIC_API_KEY`, `CRITIC_MODEL`, and
 `CRITIC_SUPPORTS_JSON_SCHEMA`. Provider credentials remain server-side.
+
+On Linux, criticism can instead use a locally authenticated Codex or Claude CLI through OpenLoop's
+reverse-MCP bridge. Copy `.env.cli-agent.example` to `.env`, start the app, then click **Start codex
+CLI** (or configure `CRITIC_AGENT=claude`). OpenLoop launches one detached tmux session named
+`openloop-critic`; attach with `tmux attach -t openloop-critic` if the CLI needs sign-in or you want
+to inspect it. `CRITIC_AGENT_COMMAND` can select a non-default executable and
+`CRITIC_AGENT_JOB_TIMEOUT_MS` controls the job lease.
+
+The managed critic starts in a private temporary runtime directory rather than the Git workspace,
+because document context arrives only through MCP. Codex startup update checks are disabled for this
+managed session so an update or repository-trust prompt cannot masquerade as a ready worker. Login
+remains user-owned and may still require attaching once.
+
+The server gives the CLI seven bearer-authenticated MCP tools: four for bounded document criticism
+(claim, nearby context, submit candidates, and fail) and three for issue chat (claim, submit a reply,
+and fail). The Codex launch allowlists and preapproves exactly those tools, avoiding interactive MCP
+permission prompts without disabling its read-only sandbox. Context expansion is lease-bound,
+limited to two requests and six blocks per side, and never exposes a general document or ledger
+reader. Each claimed critic job contains the selected or changed blocks and only the relevant
+open/snoozed ledger issues. Chat jobs contain one issue and at most twenty persisted messages. The
+CLI cannot mutate the document, ledger, or issue status; normal server-side validation and
+persistence still apply.
 
 Model selection, endpoints, credentials, local model residency, and diagnostic capture remain
 authoritative in `.env`. Writer-facing timing and automatic-trigger preferences are configured
@@ -143,15 +168,22 @@ issue comments are not included.
 
 Meaningful changed blocks are queued for critique after 10 seconds idle by default. Completing a
 non-empty paragraph, creating a heading, or accumulating 250 new words can request critique sooner;
-**Critique now** analyzes the currently accumulated changed blocks, including short passages. Open
-**Settings** to enable or disable each automatic trigger, choose an idle delay from 10 seconds to 5
-minutes, change the word threshold, and tune autocomplete and autosave delays. The server sends only
-changed blocks and immediate context to the configured smart model.
+**Critique now** analyzes the currently accumulated changed blocks, including short passages.
+Highlighting text opens a focused toolbar, and **Critique selection** sends only that exact review
+scope. Selections over 1,000 words show a confirmation warning by default; the threshold is
+adjustable under **Settings**, alongside automatic triggers, idle delay, word threshold,
+autocomplete delay, and autosave delay. The server sends only the focused blocks initially; an
+interactive CLI critic may request bounded neighboring blocks when needed.
 
 The deterministic mock critic creates an ambiguity issue when changed text contains
 `any model will work equally well`. The first issue opens in the right-hand ledger and receives a
-keyboard-focusable gutter marker. Select an issue to inspect its anchor, rationale, and history,
-then choose Apply rewrite, Later, Dismiss, or Resolve. Issue state and events survive refresh.
+keyboard-focusable gutter marker. Its persisted chat opens in the same panel; only one issue chat is
+current at a time, and it can be collapsed without losing the current issue. Switching issues sends
+`/clear` to the managed CLI before the next turn, while reopening the same issue does not. Highlight
+document text and choose **Add to chat** to attach it to the composer; attachments remain editable
+and are not sent until **Send**. The critic can ask for a focused clarification, and the chat header
+offers Apply rewrite, Later, Dismiss, Resolve, or Reopen without granting the critic status authority.
+Issue state, events, messages, and attachments already sent survive refresh.
 
 ## Verification
 
@@ -165,7 +197,8 @@ pnpm test
 The focused tests cover shared request schemas, document persistence, stable node IDs,
 changed-node accumulation, model adapter validation and cancellation, completion SSE, ghost-text
 acceptance/dismissal/staleness, issue state transitions, critic filtering/deduplication, persistent
-actions/history, and gutter rendering. The Playwright workflow is reserved for Phase 6, so
+actions/history, MCP bearer and lease enforcement, CLI job routing, stale-result rejection, and
+gutter rendering. The Playwright workflow is reserved for Phase 6, so
 `pnpm test:e2e` is present as the specified repository command but does not yet have an end-to-end
 browser test.
 

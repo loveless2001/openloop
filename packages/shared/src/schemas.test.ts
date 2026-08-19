@@ -5,6 +5,7 @@ import {
   CreateDocumentRequestSchema,
   EditorChangeBatchSchema,
   IssueActionRequestSchema,
+  IssueChatSendRequestSchema,
 } from "./schemas.js";
 
 describe("shared Phase 0/1 schemas", () => {
@@ -43,6 +44,7 @@ describe("shared Phase 0/1 schemas", () => {
         requestId: crypto.randomUUID(),
         documentVersion: 2,
         trigger: "word_threshold",
+        scope: { kind: "changes" },
         changedBlocks: [
           {
             nodeId,
@@ -59,5 +61,23 @@ describe("shared Phase 0/1 schemas", () => {
         documentVersion: 2,
       }),
     ).toThrow();
+  });
+
+  it("requires text or selected context for an issue-chat turn", () => {
+    expect(() =>
+      IssueChatSendRequestSchema.parse({
+        requestId: crypto.randomUUID(),
+        documentVersion: 1,
+        content: "",
+        attachments: [],
+      }),
+    ).toThrow();
+    expect(
+      IssueChatSendRequestSchema.parse({
+        requestId: crypto.randomUUID(),
+        documentVersion: 1,
+        content: "What would resolve this?",
+      }).content,
+    ).toBe("What would resolve this?");
   });
 });

@@ -13,6 +13,8 @@
     "db:reset": "tsx src/db/reset.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "@openloop/core": "workspace:*",
     "@openloop/model-adapters": "workspace:*",
     "@openloop/shared": "workspace:*",

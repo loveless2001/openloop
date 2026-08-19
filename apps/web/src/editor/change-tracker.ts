@@ -4,7 +4,9 @@ import type { Transaction } from "@tiptap/pm/state";
 
 const TRACKED_TYPES = new Set(["paragraph", "heading", "blockquote"]);
 
-function snapshots(document: ProseMirrorNode): TextBlockSnapshot[] {
+export function textBlockSnapshots(
+  document: ProseMirrorNode,
+): TextBlockSnapshot[] {
   const blocks: TextBlockSnapshot[] = [];
   let headingPath: string[] = [];
 
@@ -63,8 +65,8 @@ export function buildChangeBatch(input: {
   clientSequence: number;
   reason?: EditorChangeBatch["reason"];
 }): EditorChangeBatch {
-  const previous = snapshots(input.transaction.before);
-  const current = snapshots(input.currentDocument);
+  const previous = textBlockSnapshots(input.transaction.before);
+  const current = textBlockSnapshots(input.currentDocument);
   const previousById = new Map(previous.map((block) => [block.nodeId, block]));
   const currentIds = new Set(current.map((block) => block.nodeId));
   const removedNodeIds = previous

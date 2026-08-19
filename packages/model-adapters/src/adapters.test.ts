@@ -26,7 +26,13 @@ const criticInput = {
   requestId: "0bd170b4-1c7e-49d0-9148-bce84acb54ea",
   documentTitle: "Harness note",
   documentVersion: 1,
+  scope: { kind: "changes" as const },
   changedBlocks: [],
+  contextPolicy: {
+    canRequestMore: false,
+    maxRequests: 0,
+    maxBlocksPerSide: 0,
+  },
   openIssues: [],
 };
 

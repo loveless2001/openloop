@@ -22,9 +22,12 @@ context and allows the normal Qwen debounce and request path to proceed.
 
 The browser separately accumulates meaningful changed blocks and newly added word counts for
 critique. Configurable idle, paragraph-end, heading-created, word-threshold, and manual triggers
-submit that bounded context after autosave. The default idle delay is 10 seconds and the default
-word threshold is 250. Writer-facing settings persist as a versioned browser-local profile and take
-effect without restarting; provider and model configuration remains server-owned in `.env`. The
+submit that bounded context after autosave. A non-empty ProseMirror selection instead produces exact
+node-anchored selection snapshots and a focused manual job. Full autocomplete acceptance selects
+the inserted range and uses the same selection toolbar. The default idle delay is 10 seconds, the
+default word threshold is 250, and selections over 1,000 words require confirmation. Writer-facing
+settings persist as a versioned browser-local profile and take effect without restarting; provider
+and model configuration remains server-owned in `.env`. The
 browser consumes critic SSE events with capped reconnect backoff and polling fallback, renders issue
 anchors through ProseMirror decorations, and keeps issue filters, selection, and history in React
 state rather than inside the editor extension.
@@ -36,8 +39,9 @@ the current server version and never overwrites the local draft.
 
 SQLite lives under `data/` by default. Drizzle defines the complete baseline database schema from
 the specification so later vertical slices can add behavior without replacing persistence. Phase
-3 uses `documents`, `model_runs`, `issues`, and append-only `issue_events`; preference weights
-remain unused until Phase 5.
+3 uses `documents`, `model_runs`, `issues`, and append-only `issue_events`. Issue conversations add
+one thread per issue plus ordered `issue_chat_messages`; preference weights remain unused until
+Phase 5.
 
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
 mock implementation, and Ollama/OpenAI-compatible implementation.
@@ -51,6 +55,45 @@ smart OpenAI or compatible critic can be enabled independently without moving au
 keystroke context off-machine. The dedicated Ollama adapter owns low-latency completion and model
 residency, while the compatible critic adapter owns request formatting, timeouts, JSON-schema
 handling, and one repair attempt for malformed structured outputs.
+
+The CLI critic is a Linux-only reverse-MCP worker. The server exposes status and idempotent launch
+endpoints for one fixed `openloop-critic` tmux session. The configured `codex` or `claude`
+executable is resolved on the server; neither its command nor tmux arguments can be supplied by the
+browser. The process runs in a private temporary runtime directory rather than the Git checkout,
+since its only document access is the bounded MCP bridge. Codex startup update checks are disabled
+to prevent an interactive update prompt from blocking job claims. Codex receives the loopback MCP
+URL through CLI config
+overrides, an explicit seven-tool allowlist, and per-server MCP preapproval; it retains the read-only
+sandbox. Its ephemeral bearer token arrives through an environment variable. Claude receives a
+mode-0600 MCP config under ignored `data/`. The random bridge bearer token is also mode 0600 and
+persists locally so an existing fixed tmux session remains valid across server restarts. Both CLIs
+retain their normal local login and credential storage.
+
+`CliCriticAdapter` places provider-neutral `CriticInput` objects into an in-memory broker. One CLI
+coordinator serializes document critiques and issue-chat turns before waking tmux, so automatic
+review cannot interleave with a user conversation. The MCP endpoint supports leased claim,
+bounded-context, submit, and fail tools for document critique plus separate leased claim, reply, and
+fail tools for issue chat. The worker claims exactly one job per wake. Unknown, expired, or
+mismatched leases are rejected. Critique jobs contain only focused blocks and server-selected
+relevant open issues. If neighboring prose is required to disambiguate the focus, the
+adapter-neutral context-provider boundary lets the CLI request at most two windows of six blocks per
+side. The browser polls process and bridge states but never receives the MCP bearer token.
+
+Each issue has a persisted conversation whose state is independent of issue status. The browser
+keeps exactly one current issue chat in a floating workspace window, which may be expanded or
+collapsed without consuming ledger space. Selecting a different issue queues `/clear` through the
+serialized coordinator before that issue can send a turn; opening or expanding the same issue does
+not reset it. If an automatic document critique runs while a chat
+remains current, the coordinator clears the chat context first and replays at most the latest twenty
+persisted messages when the next chat turn begins. The database, rather than hidden CLI state, is
+therefore authoritative. Highlighted editor text becomes a removable message attachment and is not
+sent until the writer submits. The critic may return a normal reply or a focused clarification
+request, but only the writer-facing status controls can resolve, dismiss, snooze, or reopen an issue.
+
+Critic results still return through the existing adapter boundary. The server rechecks document
+version after the CLI responds, validates exact anchors against canonical content, filters and
+deduplicates candidates, and alone persists issue-ledger changes. Thus the CLI has ledger awareness
+without ledger authority.
 
 Optional training capture sits behind `CAPTURE_TRAINING_TRACES`. When disabled, completion events
 remain metadata-only. When explicitly enabled, the server appends raw candidate context and
@@ -68,6 +111,8 @@ remain the explicit responsibility of `pnpm setup:ollama`.
 
 Critic jobs use a bounded in-process queue with at most one active job per document and at most
 three queued jobs globally. Pending jobs for one document merge changed blocks by stable node ID.
+Focused selection jobs supersede a queued automatic job and are not swallowed by a running
+automatic review.
 The server filters low-confidence candidates, verifies exact quotes against both submitted changes
 and canonical saved TipTap JSON, deterministically deduplicates them, and persists validated issues.
 All issue actions pass through the pure `transitionIssue` state machine and append their event in

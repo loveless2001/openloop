@@ -75,6 +75,48 @@ export const issueEvents = sqliteTable(
   ],
 );
 
+export const issueChatThreads = sqliteTable(
+  "issue_chat_threads",
+  {
+    issueId: text("issue_id")
+      .primaryKey()
+      .references(() => issues.id),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id),
+    state: text("state").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("issue_chat_threads_document_updated_idx").on(
+      table.documentId,
+      table.updatedAt,
+    ),
+  ],
+);
+
+export const issueChatMessages = sqliteTable(
+  "issue_chat_messages",
+  {
+    id: text("id").primaryKey(),
+    issueId: text("issue_id")
+      .notNull()
+      .references(() => issueChatThreads.issueId),
+    role: text("role").notNull(),
+    kind: text("kind").notNull(),
+    content: text("content").notNull(),
+    attachmentsJson: text("attachments_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("issue_chat_messages_issue_created_idx").on(
+      table.issueId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const modelRuns = sqliteTable("model_runs", {
   id: text("id").primaryKey(),
   requestId: text("request_id").notNull(),

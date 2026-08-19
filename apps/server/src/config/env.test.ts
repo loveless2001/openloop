@@ -10,6 +10,9 @@ describe("model environment", () => {
     expect(environment.COMPLETION_MODEL).toBe("qwen2.5:0.5b");
     expect(environment.COMPLETION_KEEP_ALIVE).toBe("30m");
     expect(environment.CRITIC_PROVIDER).toBe("mock");
+    expect(environment.CRITIC_AGENT).toBe("codex");
+    expect(environment.CRITIC_AGENT_COMMAND).toBe("");
+    expect(environment.CRITIC_AGENT_JOB_TIMEOUT_MS).toBe(300_000);
     expect(environment.CAPTURE_TRAINING_TRACES).toBe(false);
   });
 
@@ -41,5 +44,14 @@ describe("model environment", () => {
     });
     expect(environment.COMPLETION_PROVIDER).toBe("mock");
     expect(environment.CRITIC_PROVIDER).toBe("mock");
+  });
+
+  it("allows the CLI agent only for the critic role", () => {
+    expect(
+      readEnvironment({ CRITIC_PROVIDER: "cli-agent" }).CRITIC_PROVIDER,
+    ).toBe("cli-agent");
+    expect(() =>
+      readEnvironment({ COMPLETION_PROVIDER: "cli-agent" }),
+    ).toThrow();
   });
 });

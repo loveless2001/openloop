@@ -96,7 +96,11 @@ function selectModel(input: {
 
 export function selectModelAdapters(
   environment: Environment,
+  options?: { criticOverride?: SelectedModel },
 ): SelectedModelAdapters {
+  if (environment.CRITIC_PROVIDER === "cli-agent" && !options?.criticOverride) {
+    throw new Error("The cli-agent provider requires a server-owned adapter.");
+  }
   return {
     completion: selectModel({
       provider: environment.COMPLETION_PROVIDER,
@@ -107,14 +111,19 @@ export function selectModelAdapters(
       role: "completion",
       keepAlive: environment.COMPLETION_KEEP_ALIVE,
     }),
-    critic: selectModel({
-      provider: environment.CRITIC_PROVIDER,
-      baseUrl: environment.CRITIC_BASE_URL,
-      apiKey: environment.CRITIC_API_KEY,
-      model: environment.CRITIC_MODEL,
-      supportsJsonSchema: environment.CRITIC_SUPPORTS_JSON_SCHEMA,
-      role: "critic",
-      keepAlive: environment.COMPLETION_KEEP_ALIVE,
-    }),
+    critic:
+      options?.criticOverride ??
+      selectModel({
+        provider:
+          environment.CRITIC_PROVIDER === "cli-agent"
+            ? "mock"
+            : environment.CRITIC_PROVIDER,
+        baseUrl: environment.CRITIC_BASE_URL,
+        apiKey: environment.CRITIC_API_KEY,
+        model: environment.CRITIC_MODEL,
+        supportsJsonSchema: environment.CRITIC_SUPPORTS_JSON_SCHEMA,
+        role: "critic",
+        keepAlive: environment.COMPLETION_KEEP_ALIVE,
+      }),
   };
 }

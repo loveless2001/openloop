@@ -20,10 +20,32 @@ const environment = readEnvironment({
 });
 let database: Database;
 let server: ReturnType<typeof buildServer>;
+const criticAgentSupervisor = {
+  status: vi.fn(async () => ({
+    state: "stopped" as const,
+    agent: "codex" as const,
+    sessionName: "openloop-critic" as const,
+    attachCommand: "tmux attach -t openloop-critic" as const,
+    message: "codex is ready to launch in tmux.",
+  })),
+  launch: vi.fn(async () => ({
+    state: "running" as const,
+    agent: "codex" as const,
+    sessionName: "openloop-critic" as const,
+    attachCommand: "tmux attach -t openloop-critic" as const,
+    message: "codex is running in openloop-critic.",
+  })),
+};
 
 beforeAll(async () => {
   database = openDatabase(environment.DATABASE_URL);
-  server = buildServer({ environment, database, logger: false });
+  server = buildServer({
+    environment,
+    database,
+    logger: false,
+    criticAgentSupervisor,
+    mcpBearerToken: "test-token",
+  });
   await server.ready();
 });
 
@@ -52,13 +74,36 @@ describe("Phase 0/1 server", () => {
       state: "ready",
     });
 
+    const criticAgentStatus = await server.inject({
+      method: "GET",
+      url: "/v1/critic-agent/status",
+    });
+    expect(criticAgentStatus.json()).toMatchObject({
+      state: "stopped",
+      agent: "codex",
+      sessionName: "openloop-critic",
+      bridgeState: "inactive",
+      pendingJobs: 0,
+    });
+    const launchedCriticAgent = await server.inject({
+      method: "POST",
+      url: "/v1/critic-agent/launch",
+    });
+    expect(launchedCriticAgent.json()).toMatchObject({
+      state: "running",
+      attachCommand: "tmux attach -t openloop-critic",
+      bridgeState: "inactive",
+    });
+
     const tables = database.sqlite
       .prepare(
-        "select name from sqlite_master where type = 'table' and name in ('documents', 'issues', 'issue_events', 'model_runs', 'preference_weights') order by name",
+        "select name from sqlite_master where type = 'table' and name in ('documents', 'issues', 'issue_events', 'issue_chat_threads', 'issue_chat_messages', 'model_runs', 'preference_weights') order by name",
       )
       .all() as Array<{ name: string }>;
     expect(tables.map(({ name }) => name)).toEqual([
       "documents",
+      "issue_chat_messages",
+      "issue_chat_threads",
       "issue_events",
       "issues",
       "model_runs",
@@ -71,6 +116,8 @@ describe("Phase 0/1 server", () => {
       )
       .all() as Array<{ name: string }>;
     expect(indexes.map(({ name }) => name)).toEqual([
+      "issue_chat_messages_issue_created_idx",
+      "issue_chat_threads_document_updated_idx",
       "issue_events_document_created_idx",
       "issue_events_issue_created_idx",
       "issues_document_dedupe_idx",
@@ -266,6 +313,7 @@ describe("Phase 0/1 server", () => {
         requestId: "ac962121-27c0-433d-b82e-f1600307698a",
         documentVersion: 0,
         trigger: "idle",
+        scope: { kind: "changes" },
         changedBlocks,
       },
     });
@@ -300,6 +348,7 @@ describe("Phase 0/1 server", () => {
         requestId: "f863cd13-95d3-498e-89c6-2c5f79be0aa1",
         documentVersion: 0,
         trigger: "manual",
+        scope: { kind: "changes" },
         changedBlocks,
       },
     });
@@ -392,6 +441,7 @@ describe("Phase 0/1 server", () => {
         requestId: "5aee8a72-6616-4107-8fd1-d1dcce2e770f",
         documentVersion: 0,
         trigger: "idle",
+        scope: { kind: "changes" },
         changedBlocks: [
           {
             nodeId,

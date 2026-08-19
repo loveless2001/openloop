@@ -130,3 +130,47 @@ datasets and artifacts are ignored, and stage plans carry `executionEnabled: fal
 capture, natural-continuation sampling, trainers, conversion, model registration, and deployment are
 not activated by this architecture slice. This makes later CPT, continuation SFT, and preference
 experiments reviewable without coupling routine application boot to weight updates.
+
+## 019 — Manage one fixed Linux critic CLI session
+
+The initial no-API-key critic process uses a fixed `openloop-critic` tmux session on Linux. The
+server, not the browser, selects the `.env`-configured Codex or Claude executable. The worker runs
+in a private temporary directory rather than the Git workspace, and Codex startup update checks are
+disabled so update and repository-trust prompts cannot create a false-ready worker. Launch is
+detached and idempotent, status is obtained from tmux, and the UI publishes
+`tmux attach -t openloop-critic` for authentication or inspection. The CLI continues to own its
+credentials. Codex preapproves only the explicit seven-tool OpenLoop MCP allowlist while retaining
+its read-only sandbox; global approval and sandbox bypass is not used. The browser cannot supply a
+command, arguments, MCP URL, or token.
+
+## 020 — Give the CLI bounded ledger context through leased MCP jobs
+
+`CRITIC_PROVIDER=cli-agent` adapts the existing critic interface to an in-memory reverse-MCP broker.
+The agent can claim one job, submit zero to three validated candidates, or fail the lease. Jobs
+contain changed blocks and the same relevant open-issue subset used by API-backed critics; there is
+no general ledger read or write tool. A random mode-0600 bearer token under ignored local data
+protects the loopback endpoint and remains stable across server restarts; a separate random token
+binds every submission to its active job lease. The server rejects stale document versions and
+remains solely responsible for filtering, anchoring, deduplication, and persistence.
+
+## 021 — Use explicit selections as the shared review scope
+
+Manual critique and accepted autocomplete text use one editor selection representation: exact
+stable-node snapshots, source, character offsets, and word count. A selection job supersedes queued
+automatic work for that document, while server-side anchor and document-version checks remain
+unchanged. The browser warns above a writer-configurable 1,000-word default but permits explicit
+confirmation. Interactive critic adapters receive a bounded context-provider callback; the CLI
+exposes it as a lease-authenticated MCP tool limited to two requests of six neighboring blocks per
+side. This supports clarification without granting general document or ledger access.
+
+## 022 — Make issue chat persisted, singular, floating, and reset at issue boundaries
+
+The browser has exactly one current issue chat in a floating workspace window rather than the ledger
+layout. Collapsing it preserves that current issue; selecting a different issue switches the chat and
+sends `/clear` to the authenticated CLI before any new turn. All CLI work passes through one
+serialized coordinator, so a reset cannot be inserted between claim and submission. Thread state
+(`idle`, waiting on either participant, or error) is separate from issue status, and only explicit
+writer actions change the issue lifecycle. Messages and selected-text
+attachments are persisted in SQLite; each CLI turn receives the issue plus at most twenty saved
+messages. This makes the database authoritative, prevents hidden context from leaking across issues,
+and lets an automatic critique temporarily use the same CLI without losing the visible conversation.

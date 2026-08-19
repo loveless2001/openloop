@@ -211,6 +211,18 @@ export function SettingsDialog({
               suffix="words"
               value={draft.criticWordThreshold}
             />
+            <NumberSetting
+              label="Warn for selected text over"
+              max={20_000}
+              min={100}
+              onChange={(words) => update("manualCriticWordLimit", words)}
+              suffix="words"
+              value={draft.manualCriticWordLimit}
+            />
+            <small>
+              Larger selections can dilute a focused critique. You can still
+              send one after confirming the warning.
+            </small>
           </fieldset>
 
           <fieldset>

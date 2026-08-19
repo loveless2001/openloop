@@ -51,11 +51,19 @@ export class CriticQueue {
 
   enqueue(documentId: string, request: CriticJobRequest): string {
     const running = this.runningByDocument.get(documentId);
-    if (running?.request.documentVersion === request.documentVersion) {
+    if (
+      running?.request.documentVersion === request.documentVersion &&
+      request.scope.kind !== "selection"
+    ) {
       return running.id;
     }
     const queued = this.pending.find((job) => job.documentId === documentId);
     if (queued) {
+      if (request.scope.kind === "selection") {
+        queued.request = request;
+        return queued.id;
+      }
+      if (queued.request.scope.kind === "selection") return queued.id;
       queued.request = {
         ...request,
         trigger:

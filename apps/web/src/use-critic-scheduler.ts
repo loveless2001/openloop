@@ -8,6 +8,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { submitCriticJob } from "./api.js";
 import type { AppSettings } from "./app-settings.js";
 import { mergeChangeBatches } from "./editor/change-tracker.js";
+import {
+  countWords,
+  type EditorCriticSelection,
+} from "./editor/critic-selection.js";
 
 interface CriticSchedulerOptions {
   settings: AppSettings;
@@ -24,9 +28,9 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
   const composingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
   const accumulatedWordsRef = useRef(0);
-  const submitRef = useRef<(trigger: CriticTrigger) => Promise<void>>(
-    async () => undefined,
-  );
+  const submitRef = useRef<
+    (trigger: CriticTrigger, selection?: EditorCriticSelection) => Promise<void>
+  >(async () => undefined);
   optionsRef.current = options;
 
   const cancelTimer = useCallback(() => {
@@ -59,7 +63,7 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
     schedule,
   ]);
 
-  submitRef.current = async (trigger) => {
+  submitRef.current = async (trigger, selection) => {
     const activeOptions = optionsRef.current;
     const settings = activeOptions.settings;
     if (
@@ -74,6 +78,33 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
     const document = activeOptions.getDocument();
     const pending = pendingRef.current;
     if (!document || activeOptions.isBlocked()) return;
+    if (selection) {
+      if (trigger !== "manual") return;
+      cancelTimer();
+      await activeOptions.flushDocument();
+      if (activeOptions.isBlocked()) return;
+      try {
+        await submitCriticJob(document.id, {
+          requestId: crypto.randomUUID(),
+          documentVersion: activeOptions.getDocumentVersion(),
+          trigger,
+          scope: {
+            kind: "selection",
+            source: selection.source,
+            wordCount: selection.wordCount,
+          },
+          changedBlocks: selection.blocks,
+        });
+        activeOptions.reportStatus("Selection queued for critique…", 1_500);
+      } catch (error) {
+        activeOptions.reportStatus(
+          error instanceof Error ? error.message : "Critic unavailable",
+          2_500,
+        );
+      }
+      schedule();
+      return;
+    }
     if (pending && pending.documentId !== document.id) {
       pendingRef.current = null;
       accumulatedWordsRef.current = 0;
@@ -107,6 +138,7 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
         requestId: crypto.randomUUID(),
         documentVersion: activeOptions.getDocumentVersion(),
         trigger,
+        scope: { kind: "changes" },
         changedBlocks: pending.changedBlocks,
       });
       activeOptions.reportStatus("Critic queued…", 1_200);
@@ -165,9 +197,12 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
     [schedule],
   );
 
-  const request = useCallback((trigger: CriticTrigger) => {
-    void submitRef.current(trigger);
-  }, []);
+  const request = useCallback(
+    (trigger: CriticTrigger, selection?: EditorCriticSelection) => {
+      void submitRef.current(trigger, selection);
+    },
+    [],
+  );
 
   const setComposing = useCallback(
     (composing: boolean) => {
@@ -181,10 +216,4 @@ export function useCriticScheduler(options: CriticSchedulerOptions) {
   return { queueChange, request, setComposing };
 }
 
-export function countWords(value: string): number {
-  return (
-    value.match(
-      /[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:['’-][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*/gu,
-    )?.length ?? 0
-  );
-}
+export { countWords } from "./editor/critic-selection.js";

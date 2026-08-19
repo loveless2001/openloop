@@ -1,5 +1,10 @@
 import { Extension } from "@tiptap/core";
-import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import {
+  Plugin,
+  PluginKey,
+  TextSelection,
+  type Transaction,
+} from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 export interface CompletionDecorationState {
@@ -15,6 +20,8 @@ export const completionDecorationKey =
   new PluginKey<CompletionDecorationState | null>("completionDecoration");
 
 export const COMPLETION_INTERACTION_META = "openloop.completionInteraction";
+export const COMPLETION_ACCEPTED_SELECTION_META =
+  "openloop.completionAcceptedSelection";
 
 interface CompletionDecorationOptions {
   onAcceptFull: (completion: CompletionDecorationState) => void;
@@ -33,14 +40,23 @@ function acceptFull(
 ): void {
   callback(completion);
   const acceptedText = completion.insertText ?? completion.text;
+  const acceptedFrom = completion.replaceFrom ?? completion.from;
+  const transaction = view.state.tr.insertText(
+    acceptedText,
+    acceptedFrom,
+    completion.from,
+  );
   view.dispatch(
-    view.state.tr
-      .insertText(
-        acceptedText,
-        completion.replaceFrom ?? completion.from,
-        completion.from,
+    transaction
+      .setSelection(
+        TextSelection.create(
+          transaction.doc,
+          acceptedFrom,
+          acceptedFrom + acceptedText.length,
+        ),
       )
       .setMeta(COMPLETION_INTERACTION_META, true)
+      .setMeta(COMPLETION_ACCEPTED_SELECTION_META, true)
       .setMeta(completionDecorationKey, null),
   );
   view.focus();

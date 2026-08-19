@@ -3,12 +3,17 @@ import { createHash } from "node:crypto";
 import {
   CRITIC_PROMPT_VERSION,
   ModelAdapterError,
+  type CriticContextProvider,
 } from "@openloop/model-adapters";
 import type { CriticJobRequest, TextBlockSnapshot } from "@openloop/shared";
 
 import type { Database } from "./db/client.js";
 import { getDocument } from "./documents.js";
-import { listIssues, persistCriticCandidates } from "./issues.js";
+import {
+  documentBlocks,
+  listIssues,
+  persistCriticCandidates,
+} from "./issues.js";
 import { createModelRun, finishModelRun } from "./model-runs.js";
 import type { SelectedModelAdapters } from "./models/provider.js";
 
@@ -46,6 +51,43 @@ function relevantOpenIssues(
     }));
 }
 
+const MAX_CONTEXT_REQUESTS = 2;
+const MAX_CONTEXT_BLOCKS_PER_SIDE = 6;
+
+function createContextProvider(
+  documentContent: Parameters<typeof documentBlocks>[0],
+  focusedBlocks: TextBlockSnapshot[],
+): CriticContextProvider {
+  const blocks = documentBlocks(documentContent);
+  const focusedIds = new Set(focusedBlocks.map((block) => block.nodeId));
+  const focusedIndices = blocks
+    .map((block, index) => (focusedIds.has(block.nodeId) ? index : -1))
+    .filter((index) => index >= 0);
+  const firstIndex = Math.min(...focusedIndices);
+  const lastIndex = Math.max(...focusedIndices);
+  const snapshot = (block: (typeof blocks)[number]): TextBlockSnapshot => ({
+    ...block,
+  });
+
+  return async ({ beforeBlocks, afterBlocks }, signal) => {
+    if (signal.aborted) {
+      throw new ModelAdapterError(
+        "MODEL_ABORTED",
+        "The critic context request was aborted.",
+      );
+    }
+    if (!focusedIndices.length) return { beforeBlocks: [], afterBlocks: [] };
+    return {
+      beforeBlocks: blocks
+        .slice(Math.max(0, firstIndex - beforeBlocks), firstIndex)
+        .map(snapshot),
+      afterBlocks: blocks
+        .slice(lastIndex + 1, lastIndex + 1 + afterBlocks)
+        .map(snapshot),
+    };
+  };
+}
+
 export async function runCriticJob(input: {
   database: Database;
   selectedModel: SelectedModelAdapters;
@@ -57,6 +99,12 @@ export async function runCriticJob(input: {
   };
 }): Promise<ReturnType<typeof persistCriticCandidates>> {
   const document = getDocument(input.database, input.documentId);
+  if (document.version !== input.request.documentVersion) {
+    throw new ModelAdapterError(
+      "MODEL_ABORTED",
+      "The critic request targets an older document version.",
+    );
+  }
   if (
     input.request.changedBlocks.length === 0 ||
     (input.request.trigger !== "manual" &&
@@ -105,7 +153,13 @@ export async function runCriticJob(input: {
         requestId: input.request.requestId,
         documentTitle: document.title,
         documentVersion: input.request.documentVersion,
+        scope: input.request.scope,
         changedBlocks: input.request.changedBlocks,
+        contextPolicy: {
+          canRequestMore: true,
+          maxRequests: MAX_CONTEXT_REQUESTS,
+          maxBlocksPerSide: MAX_CONTEXT_BLOCKS_PER_SIDE,
+        },
         openIssues: relevantOpenIssues(
           input.database,
           input.documentId,
@@ -113,9 +167,17 @@ export async function runCriticJob(input: {
         ),
       },
       new AbortController().signal,
+      createContextProvider(document.contentJson, input.request.changedBlocks),
     );
+    const currentDocument = getDocument(input.database, input.documentId);
+    if (currentDocument.version !== input.request.documentVersion) {
+      throw new ModelAdapterError(
+        "MODEL_ABORTED",
+        "The document changed before the critic result was submitted.",
+      );
+    }
     const results = persistCriticCandidates(input.database, {
-      document,
+      document: currentDocument,
       documentVersion: input.request.documentVersion,
       changedBlocks: input.request.changedBlocks,
       candidates,

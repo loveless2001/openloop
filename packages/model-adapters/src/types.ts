@@ -1,5 +1,6 @@
 import type { IssueRecord } from "@openloop/core";
 import type {
+  CriticScope,
   IssueCandidateSchema,
   ReconcileResultSchema,
   TextBlockSnapshot,
@@ -25,7 +26,13 @@ export interface CriticInput {
   requestId: string;
   documentTitle: string;
   documentVersion: number;
+  scope: CriticScope;
   changedBlocks: TextBlockSnapshot[];
+  contextPolicy: {
+    canRequestMore: boolean;
+    maxRequests: number;
+    maxBlocksPerSide: number;
+  };
   openIssues: Array<{
     id: string;
     type: string;
@@ -34,6 +41,21 @@ export interface CriticInput {
     status: string;
   }>;
 }
+
+export interface CriticContextRequest {
+  beforeBlocks: number;
+  afterBlocks: number;
+}
+
+export interface CriticContextResponse {
+  beforeBlocks: TextBlockSnapshot[];
+  afterBlocks: TextBlockSnapshot[];
+}
+
+export type CriticContextProvider = (
+  request: CriticContextRequest,
+  signal: AbortSignal,
+) => Promise<CriticContextResponse>;
 
 export interface ReconcileInput {
   requestId: string;
@@ -59,6 +81,7 @@ export interface ModelAdapter {
   critique(
     input: CriticInput,
     signal: AbortSignal,
+    contextProvider?: CriticContextProvider,
   ): Promise<Array<z.infer<typeof IssueCandidateSchema>>>;
 
   reconcile(

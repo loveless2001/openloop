@@ -12,6 +12,9 @@ export type {
   CompletionChunk,
   CompletionInput,
   CriticInput,
+  CriticContextProvider,
+  CriticContextRequest,
+  CriticContextResponse,
   ModelAdapter,
   ReconcileInput,
 } from "./types.js";

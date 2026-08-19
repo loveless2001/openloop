@@ -1,16 +1,21 @@
 import {
   ApiErrorSchema,
   CriticJobResponseSchema,
+  CriticAgentStatusResponseSchema,
   DocumentBundleSchema,
   DocumentRecordSchema,
   IssueActionResponseSchema,
+  IssueChatResponseSchema,
+  IssueChatSendResponseSchema,
   IssueEventsResponseSchema,
   IssueListResponseSchema,
   ModelStatusResponseSchema,
   SaveDocumentResponseSchema,
   type CriticJobRequest,
+  type CriticAgentStatusResponse,
   type DocumentRecord,
   type IssueActionRequest,
+  type IssueChatSendRequest,
   type IssueRecord,
   type EditorChangeBatch,
   type JsonValue,
@@ -30,6 +35,16 @@ export class ApiClientError extends Error {
 export async function loadModelStatus(): Promise<ModelStatusResponse> {
   const response = await fetch("/v1/model-status");
   return ModelStatusResponseSchema.parse(await parseResponse(response));
+}
+
+export async function loadCriticAgentStatus(): Promise<CriticAgentStatusResponse> {
+  const response = await fetch("/v1/critic-agent/status");
+  return CriticAgentStatusResponseSchema.parse(await parseResponse(response));
+}
+
+export async function launchCriticAgent(): Promise<CriticAgentStatusResponse> {
+  const response = await fetch("/v1/critic-agent/launch", { method: "POST" });
+  return CriticAgentStatusResponseSchema.parse(await parseResponse(response));
 }
 
 export async function submitCriticJob(
@@ -70,6 +85,30 @@ export async function performIssueAction(
     body: JSON.stringify(input),
   });
   return IssueActionResponseSchema.parse(await parseResponse(response));
+}
+
+export async function loadIssueChat(issueId: string) {
+  const response = await fetch(`/v1/issues/${issueId}/chat`);
+  return IssueChatResponseSchema.parse(await parseResponse(response));
+}
+
+export async function activateIssueChat(issueId: string) {
+  const response = await fetch(`/v1/issues/${issueId}/chat/activate`, {
+    method: "POST",
+  });
+  return IssueChatResponseSchema.parse(await parseResponse(response));
+}
+
+export async function sendIssueChatMessage(
+  issueId: string,
+  input: IssueChatSendRequest,
+) {
+  const response = await fetch(`/v1/issues/${issueId}/chat/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return IssueChatSendResponseSchema.parse(await parseResponse(response));
 }
 
 async function parseResponse(response: Response): Promise<unknown> {

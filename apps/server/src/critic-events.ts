@@ -1,4 +1,8 @@
-import type { IssueRecord } from "@openloop/shared";
+import type {
+  IssueChatMessage,
+  IssueChatThread,
+  IssueRecord,
+} from "@openloop/shared";
 
 export type CriticEvent =
   | {
@@ -13,6 +17,14 @@ export type CriticEvent =
   | {
       event: "critic_error";
       data: { code: string; message: string; jobId: string };
+    }
+  | {
+      event: "issue_chat_updated";
+      data: {
+        issueId: string;
+        thread: IssueChatThread;
+        message?: IssueChatMessage;
+      };
     };
 
 type Listener = (event: CriticEvent) => void;
