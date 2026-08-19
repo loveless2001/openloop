@@ -12,6 +12,7 @@ import {
   saveDocument,
 } from "./api.js";
 import { mergeChangeBatches } from "./editor/change-tracker.js";
+import type { AppSettings } from "./app-settings.js";
 import { useCriticScheduler } from "./use-critic-scheduler.js";
 
 const DOCUMENT_STORAGE_KEY = "openloop.documentId";
@@ -42,7 +43,7 @@ function emptyChangeBatch(
   };
 }
 
-export function useDocumentSession() {
+export function useDocumentSession(appSettings: AppSettings) {
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [title, setTitle] = useState("Untitled");
   const [version, setVersion] = useState(0);
@@ -86,9 +87,9 @@ export function useDocumentSession() {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(
       () => void flushRef.current(),
-      __AUTOSAVE_DEBOUNCE_MS__,
+      appSettings.autosaveDebounceMs,
     );
-  }, []);
+  }, [appSettings.autosaveDebounceMs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,6 +236,7 @@ export function useDocumentSession() {
   };
 
   const critic = useCriticScheduler({
+    settings: appSettings,
     flushDocument: () => flushRef.current(),
     getDocument: () => documentRef.current,
     getDocumentVersion: () => versionRef.current,

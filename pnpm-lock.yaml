@@ -44,6 +44,9 @@ importers:
       '@openloop/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@openloop/training':
+        specifier: workspace:*
+        version: link:../../packages/training
       better-sqlite3:
         specifier: ^12.2.0
         version: 12.11.1
@@ -163,6 +166,19 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.2.0)(happy-dom@18.0.1)(tsx@4.23.12)
+
+  packages/training:
+    dependencies:
+      zod:
+        specifier: ^4.1.5
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.13.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@24.13.3)(happy-dom@18.0.1)(tsx@4.23.12)
 
 packages:
 

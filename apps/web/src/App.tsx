@@ -7,14 +7,21 @@ import {
 } from "./editor/OpenLoopEditor.js";
 import { IssuePanel } from "./IssuePanel.js";
 import { FileMenu, markdownFilename } from "./FileMenu.js";
+import { SettingsDialog } from "./SettingsDialog.js";
+import { useAppSettings } from "./use-app-settings.js";
 import { useDocumentSession } from "./use-document-session.js";
 import { useIssueLedger } from "./use-issue-ledger.js";
 
 export function App() {
-  const session = useDocumentSession();
+  const appSettings = useAppSettings();
+  const session = useDocumentSession(appSettings.settings);
   const editorRef = useRef<OpenLoopEditorHandle>(null);
   const [modelLabel, setModelLabel] = useState("Checking model…");
+  const [modelStatus, setModelStatus] = useState<Awaited<
+    ReturnType<typeof loadModelStatus>
+  > | null>(null);
   const [completionReady, setCompletionReady] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const ledger = useIssueLedger({
     documentId: session.document?.id,
     documentVersion: session.version,
@@ -28,6 +35,7 @@ export function App() {
       try {
         const status = await loadModelStatus();
         if (!active) return;
+        setModelStatus(status);
         setCompletionReady(status.state === "ready");
         const providerLabel =
           status.mode === "offline"
@@ -135,6 +143,13 @@ export function App() {
           >
             Critique now
           </button>
+          <button
+            className="settings-button"
+            onClick={() => setSettingsOpen(true)}
+            type="button"
+          >
+            Settings
+          </button>
           <span className="phase-badge" title="Active autocomplete provider">
             {modelLabel}
           </span>
@@ -146,10 +161,13 @@ export function App() {
           <div className="paper">
             <OpenLoopEditor
               baseVersion={session.version}
+              completionDebounceMs={appSettings.settings.completionDebounceMs}
               completionBlocked={
                 session.status === "conflict" || !completionReady
               }
               content={session.document.contentJson}
+              dictionaryEnabled={appSettings.settings.dictionaryEnabled}
+              dictionaryEntries={appSettings.settings.dictionaryEntries}
               documentId={session.document.id}
               issues={ledger.issues}
               key={`${session.document.id}:${session.document.updatedAt}`}
@@ -241,6 +259,15 @@ export function App() {
           </section>
         </div>
       ) : null}
+
+      <SettingsDialog
+        modelStatus={modelStatus}
+        onClose={() => setSettingsOpen(false)}
+        onReset={appSettings.resetSettings}
+        onSave={appSettings.setSettings}
+        open={settingsOpen}
+        settings={appSettings.settings}
+      />
     </div>
   );
 }

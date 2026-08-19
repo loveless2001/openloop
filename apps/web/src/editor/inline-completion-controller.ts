@@ -19,6 +19,10 @@ import {
   sha256,
   type CompletionContext,
 } from "./completion-context.js";
+import {
+  findPersonalDictionarySuggestion,
+  type PersonalDictionaryEntry,
+} from "../personal-dictionary.js";
 
 interface ActiveCompletion {
   requestId: string;
@@ -38,7 +42,11 @@ interface InlineCompletionControllerOptions {
   getDocumentVersion: () => number;
   hasFocus: () => boolean;
   isBlocked: () => boolean;
-  debounceMs: number;
+  getDebounceMs: () => number;
+  getDictionary: () => {
+    enabled: boolean;
+    entries: PersonalDictionaryEntry[];
+  };
   onStatus: (message?: string, durationMs?: number) => void;
 }
 
@@ -47,6 +55,7 @@ export class InlineCompletionController {
   private addedCharacters = 0;
   private composing = false;
   private destroyed = false;
+  private dictionarySuppression: string | null = null;
   private preparing = false;
   private timer: number | null = null;
 
@@ -56,6 +65,19 @@ export class InlineCompletionController {
     if (transaction.getMeta(COMPLETION_INTERACTION_META)) {
       this.refreshContextAfterWordAcceptance();
       return;
+    }
+
+    const visibleCompletion = completionDecorationKey.getState(
+      this.options.editor.state,
+    );
+    if (visibleCompletion?.source === "dictionary") {
+      const current = getCompletionContext(this.options.editor);
+      const contextChanged =
+        !current || current.absolutePosition !== visibleCompletion.from;
+      if (transaction.docChanged || contextChanged) {
+        if (transaction.docChanged) this.dictionarySuppression = null;
+        setCompletionDecoration(this.options.editor.view, null);
+      }
     }
 
     if (this.active) {
@@ -88,12 +110,24 @@ export class InlineCompletionController {
   handleBlur(): void {
     this.cancelTimer();
     if (this.active) this.invalidate(this.active.shown ? "dismissed" : "stale");
+    if (
+      completionDecorationKey.getState(this.options.editor.state)?.source ===
+      "dictionary"
+    ) {
+      setCompletionDecoration(this.options.editor.view, null);
+    }
   }
 
   handleCompositionStart(): void {
     this.composing = true;
     this.cancelTimer();
     if (this.active) this.invalidate(this.active.shown ? "dismissed" : "stale");
+    if (
+      completionDecorationKey.getState(this.options.editor.state)?.source ===
+      "dictionary"
+    ) {
+      setCompletionDecoration(this.options.editor.view, null);
+    }
   }
 
   handleCompositionEnd(): void {
@@ -105,9 +139,33 @@ export class InlineCompletionController {
     if (this.options.isBlocked() && this.active) {
       this.invalidate(this.active.shown ? "dismissed" : "stale");
     }
+    if (
+      this.options.isBlocked() &&
+      completionDecorationKey.getState(this.options.editor.state)?.source ===
+        "dictionary"
+    ) {
+      setCompletionDecoration(this.options.editor.view, null);
+    }
+  }
+
+  handleDictionaryChange(): void {
+    this.dictionarySuppression = null;
+    if (
+      completionDecorationKey.getState(this.options.editor.state)?.source ===
+      "dictionary"
+    ) {
+      setCompletionDecoration(this.options.editor.view, null);
+    }
+    this.schedule();
   }
 
   acceptFull(completion: CompletionDecorationState): void {
+    if (completion.source === "dictionary") {
+      this.dictionarySuppression = null;
+      this.addedCharacters = 0;
+      this.options.onStatus();
+      return;
+    }
     const active = this.active;
     if (!active || active.requestId !== completion.requestId) return;
     active.controller.abort();
@@ -133,6 +191,11 @@ export class InlineCompletionController {
   }
 
   dismiss(completion: CompletionDecorationState): void {
+    if (completion.source === "dictionary") {
+      this.dictionarySuppression = completion.requestId;
+      queueMicrotask(() => this.schedule());
+      return;
+    }
     if (!this.active || this.active.requestId !== completion.requestId) return;
     this.invalidate("rejected");
   }
@@ -150,19 +213,48 @@ export class InlineCompletionController {
       this.destroyed ||
       this.active ||
       this.preparing ||
-      this.addedCharacters < 3 ||
       this.composing ||
       this.options.isBlocked() ||
-      !this.options.hasFocus() ||
-      !getCompletionContext(this.options.editor)
+      !this.options.hasFocus()
     ) {
       return;
     }
 
+    const context = getCompletionContext(this.options.editor);
+    if (!context) return;
+    const visibleCompletion = completionDecorationKey.getState(
+      this.options.editor.state,
+    );
+    if (visibleCompletion?.source === "dictionary") return;
+    const dictionary = this.options.getDictionary();
+    if (dictionary.enabled) {
+      const suggestion = findPersonalDictionarySuggestion(
+        context.prefix,
+        dictionary.entries,
+      );
+      if (suggestion) {
+        const requestId = `dictionary:${context.nodeId}:${context.cursorOffset}:${suggestion.key}`;
+        if (requestId !== this.dictionarySuppression) {
+          setCompletionDecoration(this.options.editor.view, {
+            requestId,
+            from: this.options.editor.state.selection.from,
+            text: suggestion.displayText,
+            source: "dictionary",
+            insertText: suggestion.insertText,
+            replaceFrom:
+              this.options.editor.state.selection.from -
+              suggestion.replaceCharacters,
+          });
+          return;
+        }
+      }
+    }
+    if (this.addedCharacters < 3) return;
+
     this.timer = window.setTimeout(() => {
       this.timer = null;
       void this.request();
-    }, this.options.debounceMs);
+    }, this.options.getDebounceMs());
   }
 
   private async request(): Promise<void> {
@@ -230,6 +322,7 @@ export class InlineCompletionController {
               requestId: active.requestId,
               from: this.options.editor.state.selection.from,
               text: active.text,
+              source: "model",
             });
             if (!active.shown) {
               active.shown = true;

@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @openloop/server dev\" \"pnpm --filter @openloop/web dev\"",
     "setup:ollama": "node scripts/setup-ollama.mjs",
+    "training:compile": "pnpm --filter @openloop/training build && node packages/training/dist/cli.js compile",
+    "training:plan": "pnpm --filter @openloop/training build && node packages/training/dist/cli.js plan",
+    "training:gate": "pnpm --filter @openloop/training build && node packages/training/dist/cli.js gate",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",

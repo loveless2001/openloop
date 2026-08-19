@@ -16,6 +16,7 @@
     "@openloop/core": "workspace:*",
     "@openloop/model-adapters": "workspace:*",
     "@openloop/shared": "workspace:*",
+    "@openloop/training": "workspace:*",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^17.2.1",
     "drizzle-orm": "^0.44.5",

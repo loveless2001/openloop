@@ -4,7 +4,7 @@ This document describes the implemented Phase 0–3 slice plus the current Markd
 
 The browser owns the TipTap editor, stable node IDs, changed-node tracking, dirty state, and
 autosave scheduling. It sends canonical TipTap JSON, derived text, a base version, and an
-accumulated `EditorChangeBatch` to the Fastify API after 750 ms of inactivity.
+accumulated `EditorChangeBatch` to the Fastify API after the writer-configured autosave delay.
 
 The official TipTap Markdown bridge parses opened `.md` files and serializes downloads. Markdown
 is the user-facing file format, while TipTap JSON remains the internal anchor-preserving format.
@@ -15,11 +15,19 @@ and the ProseMirror ghost-text decoration. Completion text remains outside TipTa
 writer accepts it. The frontend sends provider-neutral completion requests and metadata-only
 interaction events; it contains no provider credentials or provider-specific protocol code.
 
-The browser separately accumulates meaningful changed blocks for critique. Idle, paragraph-end,
-heading-created, and manual triggers submit that bounded context after autosave. It consumes critic
-SSE events with capped reconnect backoff and polling fallback, renders issue anchors through
-ProseMirror decorations, and keeps issue filters, selection, and history in React state rather than
-inside the editor extension.
+Before starting a model request, the completion controller checks a browser-local personal
+dictionary. Partial names, terms, and phrases append their unmatched suffix; exact shortcuts replace
+the shortcut on acceptance. Explicit rejection suppresses that dictionary candidate for the current
+context and allows the normal Qwen debounce and request path to proceed.
+
+The browser separately accumulates meaningful changed blocks and newly added word counts for
+critique. Configurable idle, paragraph-end, heading-created, word-threshold, and manual triggers
+submit that bounded context after autosave. The default idle delay is 10 seconds and the default
+word threshold is 250. Writer-facing settings persist as a versioned browser-local profile and take
+effect without restarting; provider and model configuration remains server-owned in `.env`. The
+browser consumes critic SSE events with capped reconnect backoff and polling fallback, renders issue
+anchors through ProseMirror decorations, and keeps issue filters, selection, and history in React
+state rather than inside the editor extension.
 
 The server owns environment validation, document persistence, and version arbitration. It parses
 every JSON boundary with Zod, regenerates `plainText` from canonical TipTap JSON, and performs a
@@ -46,8 +54,11 @@ handling, and one repair attempt for malformed structured outputs.
 
 Optional training capture sits behind `CAPTURE_TRAINING_TRACES`. When disabled, completion events
 remain metadata-only. When explicitly enabled, the server appends raw candidate context and
-interaction outcomes to local JSONL as separate request-ID-linked records. Trace I/O is serialized,
-flushed during shutdown, and never changes completion delivery when capture fails.
+interaction outcomes to local trace-v2 JSONL as candidate-ID-linked records. Trace I/O is
+serialized, flushed during shutdown, and never changes completion delivery when capture fails.
+The separate `@openloop/training` package owns trace and dataset contracts, deterministic offline
+compilation, content-hashed manifests, inert experiment plans, and deployment gate evaluation. It
+does not contain a trainer or deployment actuator; its plan manifests explicitly disable execution.
 
 For a local Ollama endpoint, server readiness includes the model runtime. Startup reuses an
 existing Ollama server or launches `ollama serve`, verifies that the configured completion model is

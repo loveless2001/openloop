@@ -2,32 +2,20 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
 import type { CompletionInteractionRequest } from "@openloop/shared";
+import type {
+  CompletionCandidateTraceV2,
+  CompletionReplacementTraceV2,
+  NaturalContinuationTraceV2,
+  TrainingTraceV2,
+} from "@openloop/training";
 
 import { findWorkspaceRoot } from "./config/workspace.js";
 
-export interface CompletionCandidateTrace {
-  type: "completion_candidate";
-  requestId: string;
-  provider: string;
-  model: string;
-  documentTitle: string;
-  prefix: string;
-  suffix: string;
-  headingPath: string[];
-  suggestion: string;
-  status: "completed" | "aborted" | "error";
-  errorCode?: string;
-}
+type TracePayload<Trace> = Trace extends unknown
+  ? Omit<Trace, "schemaVersion" | "recordedAt">
+  : never;
 
-export interface CompletionFeedbackTrace {
-  type: "completion_feedback";
-  requestId: string;
-  event: CompletionInteractionRequest["event"];
-  acceptedCharacters?: number;
-}
-
-export type CompletionTrainingTrace =
-  CompletionCandidateTrace | CompletionFeedbackTrace;
+export type CompletionTrainingTrace = TrainingTraceV2;
 
 interface TrainingTraceWriterConfig {
   enabled: boolean;
@@ -50,15 +38,26 @@ export class TrainingTraceWriter {
   }
 
   recordCandidate(
-    trace: Omit<CompletionCandidateTrace, "type">,
+    trace: Omit<
+      CompletionCandidateTraceV2,
+      "type" | "schemaVersion" | "recordedAt" | "candidateId"
+    >,
   ): Promise<void> {
-    return this.append({ type: "completion_candidate", ...trace });
+    return this.append({
+      type: "completion_candidate",
+      candidateId: trace.requestId,
+      ...trace,
+    });
   }
 
   recordFeedback(event: CompletionInteractionRequest): Promise<void> {
     return this.append({
       type: "completion_feedback",
       requestId: event.requestId,
+      candidateId: event.requestId,
+      documentId: event.documentId,
+      documentVersion: event.documentVersion,
+      nodeId: event.nodeId,
       event: event.event,
       ...(event.acceptedCharacters === undefined
         ? {}
@@ -66,14 +65,32 @@ export class TrainingTraceWriter {
     });
   }
 
+  recordReplacement(
+    trace: Omit<
+      CompletionReplacementTraceV2,
+      "type" | "schemaVersion" | "recordedAt"
+    >,
+  ): Promise<void> {
+    return this.append({ type: "completion_replacement", ...trace });
+  }
+
+  recordNaturalContinuation(
+    trace: Omit<
+      NaturalContinuationTraceV2,
+      "type" | "schemaVersion" | "recordedAt"
+    >,
+  ): Promise<void> {
+    return this.append({ type: "natural_continuation", ...trace });
+  }
+
   async flush(): Promise<void> {
     await this.pending;
   }
 
-  private append(trace: CompletionTrainingTrace): Promise<void> {
+  private append(trace: TracePayload<CompletionTrainingTrace>): Promise<void> {
     if (!this.enabled) return Promise.resolve();
     const record = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       recordedAt: this.now().toISOString(),
       ...trace,
     };

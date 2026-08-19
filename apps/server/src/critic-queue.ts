@@ -21,8 +21,9 @@ export class CriticQueueFullError extends Error {
 const triggerPriority: Record<CriticJobRequest["trigger"], number> = {
   idle: 0,
   paragraph_end: 1,
-  heading_created: 2,
-  manual: 3,
+  word_threshold: 2,
+  heading_created: 3,
+  manual: 4,
 };
 
 function mergeBlocks(

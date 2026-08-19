@@ -42,7 +42,7 @@ describe("shared Phase 0/1 schemas", () => {
       CriticJobRequestSchema.parse({
         requestId: crypto.randomUUID(),
         documentVersion: 2,
-        trigger: "manual",
+        trigger: "word_threshold",
         changedBlocks: [
           {
             nodeId,
@@ -52,7 +52,7 @@ describe("shared Phase 0/1 schemas", () => {
           },
         ],
       }).trigger,
-    ).toBe("manual");
+    ).toBe("word_threshold");
     expect(() =>
       IssueActionRequestSchema.parse({
         action: "apply_rewrite",

@@ -8,17 +8,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    define: {
-      __AUTOSAVE_DEBOUNCE_MS__: JSON.stringify(
-        Number(environment.AUTOSAVE_DEBOUNCE_MS || 750),
-      ),
-      __COMPLETION_DEBOUNCE_MS__: JSON.stringify(
-        Number(environment.COMPLETION_DEBOUNCE_MS || 300),
-      ),
-      __CRITIC_IDLE_MS__: JSON.stringify(
-        Number(environment.CRITIC_IDLE_MS || 1800),
-      ),
-    },
     server: {
       host: "127.0.0.1",
       port: webPort,

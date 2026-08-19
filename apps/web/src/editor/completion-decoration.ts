@@ -6,6 +6,9 @@ export interface CompletionDecorationState {
   requestId: string;
   from: number;
   text: string;
+  source?: "model" | "dictionary";
+  insertText?: string;
+  replaceFrom?: number;
 }
 
 export const completionDecorationKey =
@@ -29,7 +32,17 @@ function acceptFull(
   callback: CompletionDecorationOptions["onAcceptFull"],
 ): void {
   callback(completion);
-  view.dispatch(interactionTransaction(view, completion, completion.text, ""));
+  const acceptedText = completion.insertText ?? completion.text;
+  view.dispatch(
+    view.state.tr
+      .insertText(
+        acceptedText,
+        completion.replaceFrom ?? completion.from,
+        completion.from,
+      )
+      .setMeta(COMPLETION_INTERACTION_META, true)
+      .setMeta(completionDecorationKey, null),
+  );
   view.focus();
 }
 
@@ -158,7 +171,7 @@ export const CompletionDecoration =
                     return widget;
                   },
                   {
-                    key: `${completion.requestId}:${completion.text}`,
+                    key: `${completion.requestId}:${completion.text}:${completion.insertText ?? ""}:${completion.replaceFrom ?? ""}`,
                     side: 1,
                     stopEvent: (event) =>
                       event.target instanceof Element &&
@@ -178,6 +191,10 @@ export const CompletionDecoration =
               }
               if (event.key === "ArrowRight") {
                 event.preventDefault();
+                if (completion.source === "dictionary") {
+                  acceptFull(view, completion, options.onAcceptFull);
+                  return true;
+                }
                 const acceptedText = firstWord(completion.text);
                 const remainingText = completion.text.slice(
                   acceptedText.length,

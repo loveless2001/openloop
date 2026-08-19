@@ -102,3 +102,31 @@ enables append-only JSONL containing raw cursor context, model output, and inter
 Candidate and feedback records share a request ID so partial acceptance remains reconstructable.
 The default path is ignored local storage, and live online weight updates are deliberately excluded;
 training is an offline, reviewable operation.
+
+## 016 — Separate model environment from writer preferences
+
+Provider selection, endpoints, credentials, model IDs, local-model residency, and diagnostic
+capture remain server-owned `.env` configuration. Writer-facing behavior belongs to a versioned
+browser-local settings profile that can be edited without restarting: autocomplete and autosave
+delays plus independently enabled critic idle, paragraph, heading, and accumulated-word triggers.
+The critic waits 10 seconds at idle and triggers at 250 newly added words by default. This keeps
+secrets out of the browser while making interaction timing a user preference rather than deployment
+configuration.
+
+## 017 — Put deterministic personal vocabulary before model completion
+
+Names, terminology, recurring phrases, and shortcut expansions are deterministic user preferences,
+not model knowledge. They live with browser-local app settings and are matched synchronously before
+Qwen is called. Plain entries append only the unmatched suffix; `shortcut => replacement` entries
+replace the exact shortcut only after acceptance. Rejecting the dictionary result suppresses it for
+that unchanged context and falls through to Qwen. This keeps lexical completions immediate and
+private while reserving the model for contextual clause and sentence generation.
+
+## 018 — Keep autocomplete adaptation offline and non-executing by default
+
+Training-data contracts, deterministic compilation, experiment plans, and evaluation gates live in
+a separate `@openloop/training` package. Trace capture remains explicit local opt-in, all generated
+datasets and artifacts are ignored, and stage plans carry `executionEnabled: false`. Replacement
+capture, natural-continuation sampling, trainers, conversion, model registration, and deployment are
+not activated by this architecture slice. This makes later CPT, continuation SFT, and preference
+experiments reviewable without coupling routine application boot to weight updates.

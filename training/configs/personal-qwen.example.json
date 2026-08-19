@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "experimentName": "personal-qwen-autocomplete-v1",
+  "seed": "openloop-personal-v1",
+  "baseModel": {
+    "huggingFaceId": "Qwen/Qwen2.5-0.5B",
+    "revision": "pin-before-training",
+    "deployedOllamaModel": "qwen2.5:0.5b"
+  },
+  "data": {
+    "tracePaths": ["data/training/completion-traces.jsonl"],
+    "corpusPaths": ["data/training/corpus"],
+    "outputDirectory": "data/training/compiled/personal-qwen-v1",
+    "split": {
+      "train": 0.8,
+      "validation": 0.1,
+      "test": 0.1
+    },
+    "cptChunkCharacters": 4096,
+    "continuationPrefixCharacters": 1500,
+    "continuationTargetCharacters": 120,
+    "fimRate": 0.5
+  },
+  "stages": {
+    "cpt": {
+      "enabled": true,
+      "adapter": "lora",
+      "learningRate": 0.00005,
+      "epochs": 1,
+      "maxSequenceTokens": 1024,
+      "microBatchSize": 1,
+      "gradientAccumulationSteps": 16,
+      "loraRank": 16,
+      "loraAlpha": 32,
+      "loraDropout": 0.05,
+      "genericReplayRatio": 0.1
+    },
+    "sft": {
+      "enabled": true,
+      "adapter": "lora",
+      "learningRate": 0.00002,
+      "epochs": 2,
+      "maxSequenceTokens": 2048,
+      "microBatchSize": 1,
+      "gradientAccumulationSteps": 16,
+      "loraRank": 16,
+      "loraAlpha": 32,
+      "loraDropout": 0.05,
+      "genericReplayRatio": 0.1
+    },
+    "preference": {
+      "enabled": false,
+      "adapter": "lora",
+      "method": "dpo",
+      "beta": 0.1,
+      "minimumExamples": 1000,
+      "learningRate": 0.000005,
+      "epochs": 1,
+      "maxSequenceTokens": 2048,
+      "microBatchSize": 1,
+      "gradientAccumulationSteps": 16,
+      "loraRank": 16,
+      "loraAlpha": 32,
+      "loraDropout": 0.05,
+      "genericReplayRatio": 0.1
+    }
+  },
+  "deployment": {
+    "ollamaModelName": "openloop-qwen-personal:v1",
+    "quantizationCandidates": ["Q4_K_M", "Q5_K_M", "Q8_0"]
+  },
+  "gates": {
+    "maximumP95TtftRegression": 0.1,
+    "requireUtilityImprovement": true,
+    "rejectMemorizationFlag": true
+  }
+}

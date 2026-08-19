@@ -123,6 +123,25 @@ describe("completion decoration", () => {
     editor.destroy();
   });
 
+  it("replaces a dictionary shortcut with its expansion", () => {
+    const onAcceptFull = vi.fn();
+    const editor = editorWithCompletion({ onAcceptFull });
+    editor.commands.setTextSelection(4);
+    setCompletionDecoration(editor.view, {
+      requestId: "dictionary:btw",
+      from: 4,
+      text: " → by the way",
+      source: "dictionary",
+      insertText: "by the way",
+      replaceFrom: 1,
+    });
+
+    expect(press(editor, "Tab")).toBe(true);
+    expect(editor.getText()).toBe("by the way");
+    expect(onAcceptFull).toHaveBeenCalledOnce();
+    editor.destroy();
+  });
+
   it("renders every streamed delta and exposes clickable actions", () => {
     const onAcceptFull = vi.fn();
     const onDismiss = vi.fn();
@@ -225,7 +244,8 @@ describe("inline completion vertical slice", () => {
       getDocumentVersion: () => 0,
       hasFocus: () => true,
       isBlocked: () => false,
-      debounceMs: 0,
+      getDebounceMs: () => 0,
+      getDictionary: () => ({ enabled: false, entries: [] }),
       onStatus: () => undefined,
     });
     editor.on("transaction", ({ transaction }) =>
@@ -255,6 +275,83 @@ describe("inline completion vertical slice", () => {
       "completion_shown",
       "completion_accepted_full",
     ]);
+
+    controller.destroy();
+    editor.destroy();
+  });
+
+  it("shows a dictionary result immediately and falls through to Qwen after rejection", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(async (input) => {
+      if (String(input).endsWith("/completion-events")) {
+        return Response.json({ accepted: true }, { status: 202 });
+      }
+      const stream = new ReadableStream({
+        start(streamController) {
+          streamController.enqueue(
+            new TextEncoder().encode(
+              'event: delta\ndata: {"text":" alternative"}\n\n' +
+                'event: done\ndata: {"requestId":"c4763dfd-c791-4dfb-998f-fbfdee15704a"}\n\n',
+            ),
+          );
+          streamController.close();
+        },
+      });
+      return new Response(stream, { status: 200 });
+    });
+    globalThis.fetch = fetchImplementation;
+
+    const editor = new Editor({
+      extensions: [
+        StarterKit,
+        StableNodeId,
+        CompletionDecoration.configure({
+          onAcceptFull: (completion) => controller.acceptFull(completion),
+          onAcceptWord: (completion, accepted, remaining) =>
+            controller.acceptWord(completion, accepted, remaining),
+          onDismiss: (completion) => controller.dismiss(completion),
+        }),
+      ],
+      content: {
+        type: "doc",
+        content: [{ type: "paragraph", attrs: { nodeId } }],
+      },
+    });
+    const controller = new InlineCompletionController({
+      editor,
+      documentId,
+      getDocumentVersion: () => 0,
+      hasFocus: () => true,
+      isBlocked: () => false,
+      getDebounceMs: () => 0,
+      getDictionary: () => ({
+        enabled: true,
+        entries: [{ trigger: "OpenTelemetry", replacement: "OpenTelemetry" }],
+      }),
+      onStatus: () => undefined,
+    });
+    editor.on("transaction", ({ transaction }) =>
+      controller.handleTransaction(transaction),
+    );
+    editor.commands.insertContent("OpenT");
+
+    expect(completionDecorationKey.getState(editor.state)).toMatchObject({
+      source: "dictionary",
+      text: "elemetry",
+    });
+    expect(fetchImplementation).not.toHaveBeenCalled();
+
+    expect(press(editor, "Escape")).toBe(true);
+    await vi.waitFor(() => {
+      expect(completionDecorationKey.getState(editor.state)).toMatchObject({
+        source: "model",
+        text: " alternative",
+      });
+    });
+    expect(
+      fetchImplementation.mock.calls.some(([input]) =>
+        String(input).endsWith("/v1/completions/stream"),
+      ),
+    ).toBe(true);
 
     controller.destroy();
     editor.destroy();

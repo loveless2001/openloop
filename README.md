@@ -68,6 +68,11 @@ The complete streamed suggestion remains visible as ghost text. A compact action
 offers clickable Accept and Reject controls with `Tab` and `Esc` tooltips; `ArrowRight` remains the
 one-word acceptance shortcut.
 
+The browser-local personal dictionary runs before the model. Add plain names, terms, or frequent
+phrases in **Settings**, one per line, to complete them from a partial suffix. Add abbreviation
+expansions as `shortcut => replacement`; accepting replaces the shortcut. Rejecting a dictionary
+suggestion falls through to Qwen for the same editor context.
+
 Completion and criticism have separate provider settings. The default `.env.example` routes only
 completion to `http://127.0.0.1:11434/v1` with `COMPLETION_PROVIDER=ollama` and
 `COMPLETION_MODEL=qwen2.5:0.5b`. Use `COMPLETION_PROVIDER=mock` if you want the deterministic test
@@ -85,12 +90,43 @@ restart the server. Generic backends use `CRITIC_PROVIDER=openai-compatible` plu
 `CRITIC_BASE_URL`, `CRITIC_API_KEY`, `CRITIC_MODEL`, and
 `CRITIC_SUPPORTS_JSON_SCHEMA`. Provider credentials remain server-side.
 
+Model selection, endpoints, credentials, local model residency, and diagnostic capture remain
+authoritative in `.env`. Writer-facing timing and automatic-trigger preferences are configured
+through **Settings** in the application and persist in browser local storage without a restart.
+
 ## Opt-in local training traces
 
 Set `CAPTURE_TRAINING_TRACES=true` to capture raw completion context, generated suggestions, and
 accept/reject outcomes as append-only local JSONL. Capture is off by default and the trace path is
 under ignored `data/` storage. See [docs/TRAINING-TRACES.md](docs/TRAINING-TRACES.md) for the schema,
-privacy boundary, and recommended offline Qwen tuning workflow.
+privacy boundary, and [the staged training plan](docs/AUTOCOMPLETE-TRAINING-PIPELINE.md) for the
+recommended offline Qwen adaptation workflow.
+
+## Offline training architecture
+
+The `@openloop/training` workspace package provides versioned trace/dataset schemas, a deterministic
+local compiler, inert stage manifests, and deployment gate evaluation. It does not download models,
+run training, convert checkpoints, register Ollama models, or alter the app's configured model.
+
+```bash
+# Compile opted-in traces and an explicitly approved local corpus.
+pnpm training:compile -- --config training/configs/personal-qwen.example.json
+
+# Write a reviewable CPT plan. The manifest always has executionEnabled: false.
+pnpm training:plan -- --config training/configs/personal-qwen.example.json \
+  --stage cpt \
+  --dataset-manifest data/training/compiled/personal-qwen-v1/manifest.json \
+  --output data/training/plans/cpt.json
+
+# Evaluate recorded candidate metrics against a frozen baseline.
+pnpm training:gate -- --config training/configs/personal-qwen.example.json \
+  --baseline data/training/eval/baseline.json \
+  --candidate data/training/eval/candidate.json \
+  --output data/training/eval/gate-report.json
+```
+
+See [training/README.md](training/README.md) for input contracts, outputs, and the deliberate
+activation boundary.
 
 ## Markdown files and toolbar
 
@@ -105,10 +141,12 @@ issue comments are not included.
 
 ## Critic and issue ledger
 
-Meaningful changed blocks are queued for critique after 1,800 ms idle. Pressing Enter after a
-non-empty paragraph or creating a heading requests critique sooner; **Critique now** analyzes the
-currently accumulated changed blocks, including short passages. The server sends only changed
-blocks and immediate context to the configured smart model.
+Meaningful changed blocks are queued for critique after 10 seconds idle by default. Completing a
+non-empty paragraph, creating a heading, or accumulating 250 new words can request critique sooner;
+**Critique now** analyzes the currently accumulated changed blocks, including short passages. Open
+**Settings** to enable or disable each automatic trigger, choose an idle delay from 10 seconds to 5
+minutes, change the word threshold, and tune autocomplete and autosave delays. The server sends only
+changed blocks and immediate context to the configured smart model.
 
 The deterministic mock critic creates an ambiguity issue when changed text contains
 `any model will work equally well`. The first issue opens in the right-hand ledger and receives a

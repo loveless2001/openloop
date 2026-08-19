@@ -4,6 +4,10 @@ coverage/
 .env
 data/*
 !data/.gitkeep
+training/checkpoints/
+training/datasets/
+training/eval/
+training/manifests/
 playwright-report/
 test-results/
 *.tsbuildinfo

@@ -149,14 +149,27 @@ export function registerCompletionRoutes(
         try {
           await trainingTraceWriter.recordCandidate({
             requestId: input.requestId,
+            source: "model",
             provider: selectedModel.completion.adapter.providerId,
             model: selectedModel.completion.model,
+            modelArtifact: selectedModel.completion.model,
+            promptVersion: COMPLETION_PROMPT_VERSION,
+            documentId: input.documentId,
+            documentVersion: input.documentVersion,
+            nodeId: input.nodeId,
             documentTitle: document.title,
             prefix: input.prefix,
             suffix: input.suffix,
             headingPath: input.headingPath,
             suggestion: generatedSuggestion,
             status: traceStatus,
+            decoding: {
+              maxOutputTokens: 60,
+              temperature: 0.2,
+              ...(selectedModel.completion.adapter.providerId === "ollama"
+                ? { contextTokens: 2_048 }
+                : {}),
+            },
             ...(traceErrorCode ? { errorCode: traceErrorCode } : {}),
           });
         } catch (error) {

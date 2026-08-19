@@ -222,6 +222,7 @@ export const CriticTriggerSchema = z.enum([
   "idle",
   "paragraph_end",
   "heading_created",
+  "word_threshold",
   "manual",
 ]);
 

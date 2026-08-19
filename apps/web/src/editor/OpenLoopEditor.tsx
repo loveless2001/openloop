@@ -24,10 +24,14 @@ import { CompletionDecoration } from "./completion-decoration.js";
 import { InlineCompletionController } from "./inline-completion-controller.js";
 import { IssueGutter, setIssueGutterState } from "./issue-gutter.js";
 import { ensureStableNodeIds, StableNodeId } from "./stable-node-id.js";
+import type { PersonalDictionaryEntry } from "../personal-dictionary.js";
 
 interface OpenLoopEditorProps {
   documentId: string;
   baseVersion: number;
+  completionDebounceMs: number;
+  dictionaryEnabled: boolean;
+  dictionaryEntries: PersonalDictionaryEntry[];
   content: Record<string, JsonValue>;
   completionBlocked: boolean;
   issues: IssueRecord[];
@@ -67,6 +71,9 @@ export const OpenLoopEditor = forwardRef<
   {
     documentId,
     baseVersion,
+    completionDebounceMs,
+    dictionaryEnabled,
+    dictionaryEntries,
     content,
     completionBlocked,
     issues,
@@ -83,6 +90,11 @@ export const OpenLoopEditor = forwardRef<
   const versionRef = useRef(baseVersion);
   const onChangeRef = useRef(onChange);
   const completionBlockedRef = useRef(completionBlocked);
+  const completionDebounceMsRef = useRef(completionDebounceMs);
+  const dictionaryRef = useRef({
+    enabled: dictionaryEnabled,
+    entries: dictionaryEntries,
+  });
   const onCompletionStatusRef = useRef(onCompletionStatus);
   const onCompositionChangeRef = useRef(onCompositionChange);
   const onCriticTriggerRef = useRef(onCriticTrigger);
@@ -94,6 +106,11 @@ export const OpenLoopEditor = forwardRef<
   versionRef.current = baseVersion;
   onChangeRef.current = onChange;
   completionBlockedRef.current = completionBlocked;
+  completionDebounceMsRef.current = completionDebounceMs;
+  dictionaryRef.current = {
+    enabled: dictionaryEnabled,
+    entries: dictionaryEntries,
+  };
   onCompletionStatusRef.current = onCompletionStatus;
   onCompositionChangeRef.current = onCompositionChange;
   onCriticTriggerRef.current = onCriticTrigger;
@@ -102,6 +119,10 @@ export const OpenLoopEditor = forwardRef<
   useEffect(() => {
     completionControllerRef.current?.handleBlockedChange();
   }, [completionBlocked]);
+
+  useEffect(() => {
+    completionControllerRef.current?.handleDictionaryChange();
+  }, [dictionaryEnabled, dictionaryEntries]);
 
   const editor = useEditor(
     {
@@ -163,7 +184,8 @@ export const OpenLoopEditor = forwardRef<
           getDocumentVersion: () => versionRef.current,
           hasFocus: () => createdEditor.isFocused,
           isBlocked: () => completionBlockedRef.current,
-          debounceMs: __COMPLETION_DEBOUNCE_MS__,
+          getDebounceMs: () => completionDebounceMsRef.current,
+          getDictionary: () => dictionaryRef.current,
           onStatus: (message, durationMs) =>
             onCompletionStatusRef.current(message, durationMs),
         });

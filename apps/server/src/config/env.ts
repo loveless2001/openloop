@@ -40,19 +40,6 @@ const EnvironmentSchema = z
       .string()
       .min(1)
       .default("data/training/completion-traces.jsonl"),
-    COMPLETION_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(300),
-    CRITIC_IDLE_MS: z.coerce.number().int().nonnegative().default(1800),
-    AUTOSAVE_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(750),
-    GLOBAL_INTERRUPTION_COOLDOWN_MS: z.coerce
-      .number()
-      .int()
-      .nonnegative()
-      .default(45_000),
-    ISSUE_BASE_COOLDOWN_MS: z.coerce
-      .number()
-      .int()
-      .nonnegative()
-      .default(120_000),
     LOG_MODEL_CONTENT: booleanFromString.default(false),
     LOG_DOCUMENT_CONTENT: booleanFromString.default(false),
   })
