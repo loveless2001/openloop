@@ -15,6 +15,17 @@ const CRITIC_MCP_TOOLS = [
   "openloop_issue_chat_submit",
   "openloop_issue_chat_fail",
 ] as const;
+const CLAUDE_ISOLATED_SETTINGS = {
+  autoMemoryEnabled: false,
+  disableAllHooks: true,
+  includeGitInstructions: false,
+} as const;
+
+function applyPrivateMode(path: string, mode: number): void {
+  // Windows does not implement POSIX ownership modes. Files there inherit the
+  // current user's ACL; chmod can only toggle the read-only attribute.
+  if (process.platform !== "win32") chmodSync(path, mode);
+}
 
 export interface CriticAgentLaunchConfig {
   args: string[];
@@ -29,7 +40,7 @@ export function loadOrCreateCriticMcpToken(workspaceRoot: string): string {
   try {
     const existing = readFileSync(tokenPath, "utf8").trim();
     if (/^[0-9a-f]{64}$/.test(existing)) {
-      chmodSync(tokenPath, 0o600);
+      applyPrivateMode(tokenPath, 0o600);
       return existing;
     }
   } catch {
@@ -37,7 +48,7 @@ export function loadOrCreateCriticMcpToken(workspaceRoot: string): string {
   }
   const token = randomBytes(32).toString("hex");
   writeFileSync(tokenPath, `${token}\n`, { encoding: "utf8", mode: 0o600 });
-  chmodSync(tokenPath, 0o600);
+  applyPrivateMode(tokenPath, 0o600);
   return token;
 }
 
@@ -49,7 +60,7 @@ export function createCriticAgentLaunchConfig(input: {
   const url = `http://127.0.0.1:${input.environment.SERVER_PORT}/mcp`;
   const workingDirectory = join(tmpdir(), "openloop-critic-runtime");
   mkdirSync(workingDirectory, { recursive: true, mode: 0o700 });
-  chmodSync(workingDirectory, 0o700);
+  applyPrivateMode(workingDirectory, 0o700);
   if (input.environment.CRITIC_AGENT === "codex") {
     return {
       args: [
@@ -93,17 +104,23 @@ export function createCriticAgentLaunchConfig(input: {
     )}\n`,
     { encoding: "utf8", mode: 0o600 },
   );
-  chmodSync(configPath, 0o600);
+  applyPrivateMode(configPath, 0o600);
   return {
     args: [
       "--mcp-config",
       configPath,
+      "--strict-mcp-config",
+      "--setting-sources",
+      "",
+      "--settings",
+      JSON.stringify(CLAUDE_ISOLATED_SETTINGS),
       "--permission-mode",
-      "manual",
+      "default",
       "--allowed-tools",
       CRITIC_MCP_TOOLS.map((tool) => `mcp__openloop__${tool}`).join(","),
       "--tools",
       "",
+      "--no-chrome",
     ],
     environment: {},
     workingDirectory,

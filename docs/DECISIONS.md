@@ -131,17 +131,21 @@ capture, natural-continuation sampling, trainers, conversion, model registration
 not activated by this architecture slice. This makes later CPT, continuation SFT, and preference
 experiments reviewable without coupling routine application boot to weight updates.
 
-## 019 — Manage one fixed Linux critic CLI session
+## 019 — Manage one fixed tmux critic CLI session
 
-The initial no-API-key critic process uses a fixed `openloop-critic` tmux session on Linux. The
+The initial no-API-key critic process uses a fixed `openloop-critic` tmux session on macOS and
+Linux. Native Windows reports this optional mode as unavailable; running the whole application
+inside WSL provides the same Linux path. The
 server, not the browser, selects the `.env`-configured Codex or Claude executable. The worker runs
 in a private temporary directory rather than the Git workspace, and Codex startup update checks are
 disabled so update and repository-trust prompts cannot create a false-ready worker. Launch is
 detached and idempotent, status is obtained from tmux, and the UI publishes
 `tmux attach -t openloop-critic` for authentication or inspection. The CLI continues to own its
 credentials. Codex preapproves only the explicit seven-tool OpenLoop MCP allowlist while retaining
-its read-only sandbox; global approval and sandbox bypass is not used. The browser cannot supply a
-command, arguments, MCP URL, or token.
+its read-only sandbox; global approval and sandbox bypass is not used. Claude Code uses its native
+MCP JSON and flags: strict MCP loading, no built-in tools, an exact seven-tool preapproval list, and
+no user/project settings sources, hooks, auto-memory, Git instructions, or Chrome integration. The
+browser cannot supply a command, arguments, MCP URL, or token.
 
 ## 020 — Give the CLI bounded ledger context through leased MCP jobs
 

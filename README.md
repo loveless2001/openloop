@@ -18,7 +18,8 @@ and are intentionally not implemented.
 - Node.js 20 or newer
 - pnpm 10
 - Ollama with `qwen2.5:0.5b` for the default local autocomplete path
-- Linux, tmux, and an authenticated Codex or Claude CLI when using `CRITIC_PROVIDER=cli-agent`
+- macOS or Linux, tmux, and an authenticated Codex or Claude CLI when using
+  `CRITIC_PROVIDER=cli-agent` (Windows users can run this optional mode inside WSL)
 
 ## Start locally
 
@@ -93,12 +94,23 @@ restart the server. Generic backends use `CRITIC_PROVIDER=openai-compatible` plu
 `CRITIC_BASE_URL`, `CRITIC_API_KEY`, `CRITIC_MODEL`, and
 `CRITIC_SUPPORTS_JSON_SCHEMA`. Provider credentials remain server-side.
 
-On Linux, criticism can instead use a locally authenticated Codex or Claude CLI through OpenLoop's
-reverse-MCP bridge. Copy `.env.cli-agent.example` to `.env`, start the app, then click **Start codex
-CLI** (or configure `CRITIC_AGENT=claude`). OpenLoop launches one detached tmux session named
+On macOS or Linux, criticism can instead use a locally authenticated Codex or Claude CLI through
+OpenLoop's reverse-MCP bridge. Native Windows users can run OpenLoop inside WSL for this optional
+mode. Copy `.env.cli-agent.example` to `.env`, start the app, then click **Start codex CLI** (or
+configure `CRITIC_AGENT=claude`). OpenLoop launches one detached tmux session named
 `openloop-critic`; attach with `tmux attach -t openloop-critic` if the CLI needs sign-in or you want
 to inspect it. `CRITIC_AGENT_COMMAND` can select a non-default executable and
 `CRITIC_AGENT_JOB_TIMEOUT_MS` controls the job lease.
+
+For Claude Code, authenticate once with `claude auth login`, then set
+`CRITIC_PROVIDER=cli-agent` and `CRITIC_AGENT=claude` in `.env`. The header button will become
+**Start claude CLI**.
+
+Claude Code receives its own launch contract rather than Codex flags: only the generated OpenLoop
+MCP configuration is loaded, all built-in tools are removed, and exactly the seven bridge tools are
+preapproved. User/project settings sources, hooks, auto-memory, Git instructions, and Chrome
+integration are disabled for the managed session. Claude Code's normal account authentication is
+still used; run `claude auth login` before launching the managed critic if necessary.
 
 The managed critic starts in a private temporary runtime directory rather than the Git workspace,
 because document context arrives only through MCP. Codex startup update checks are disabled for this
@@ -108,7 +120,8 @@ remains user-owned and may still require attaching once.
 The server gives the CLI seven bearer-authenticated MCP tools: four for bounded document criticism
 (claim, nearby context, submit candidates, and fail) and three for issue chat (claim, submit a reply,
 and fail). The Codex launch allowlists and preapproves exactly those tools, avoiding interactive MCP
-permission prompts without disabling its read-only sandbox. Context expansion is lease-bound,
+permission prompts without disabling its read-only sandbox. Claude uses the corresponding native
+Claude Code restrictions described above. Context expansion is lease-bound,
 limited to two requests and six blocks per side, and never exposes a general document or ledger
 reader. Each claimed critic job contains the selected or changed blocks and only the relevant
 open/snoozed ledger issues. Chat jobs contain one issue and at most twenty persisted messages. The

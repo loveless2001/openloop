@@ -12,13 +12,13 @@ import {
 } from "./critic-agent-supervisor.js";
 
 describe("CriticAgentSupervisor", () => {
-  it("reports unsupported platforms without probing commands", async () => {
+  it("reports native Windows as unsupported without probing commands", async () => {
     const resolve = vi.fn();
     const supervisor = new CriticAgentSupervisor({
       agent: "codex",
       command: "codex",
       cwd: "/workspace",
-      platform: "darwin",
+      platform: "win32",
       resolve,
     });
 
@@ -27,6 +27,31 @@ describe("CriticAgentSupervisor", () => {
       sessionName: "openloop-critic",
     });
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it("supports tmux-managed critic sessions on macOS", async () => {
+    const run = vi.fn(async (_command: string, args: string[]) => ({
+      code: args[0] === "has-session" ? 1 : 0,
+      stderr: "",
+    }));
+    const supervisor = new CriticAgentSupervisor({
+      agent: "codex",
+      command: "codex",
+      cwd: "/workspace",
+      platform: "darwin",
+      resolve: async (command) => `/opt/homebrew/bin/${command}`,
+      run,
+    });
+
+    await expect(supervisor.status()).resolves.toMatchObject({
+      state: "stopped",
+      message: "codex is ready to launch in tmux.",
+    });
+    expect(run).toHaveBeenCalledWith("/opt/homebrew/bin/tmux", [
+      "has-session",
+      "-t",
+      "=openloop-critic",
+    ]);
   });
 
   it("reports a missing configured CLI", async () => {

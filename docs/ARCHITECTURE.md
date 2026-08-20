@@ -56,7 +56,8 @@ keystroke context off-machine. The dedicated Ollama adapter owns low-latency com
 residency, while the compatible critic adapter owns request formatting, timeouts, JSON-schema
 handling, and one repair attempt for malformed structured outputs.
 
-The CLI critic is a Linux-only reverse-MCP worker. The server exposes status and idempotent launch
+The CLI critic is a tmux-backed macOS/Linux reverse-MCP worker; Windows users can run this optional
+mode inside WSL. The server exposes status and idempotent launch
 endpoints for one fixed `openloop-critic` tmux session. The configured `codex` or `claude`
 executable is resolved on the server; neither its command nor tmux arguments can be supplied by the
 browser. The process runs in a private temporary runtime directory rather than the Git checkout,
@@ -65,7 +66,10 @@ to prevent an interactive update prompt from blocking job claims. Codex receives
 URL through CLI config
 overrides, an explicit seven-tool allowlist, and per-server MCP preapproval; it retains the read-only
 sandbox. Its ephemeral bearer token arrives through an environment variable. Claude receives a
-mode-0600 MCP config under ignored `data/`. The random bridge bearer token is also mode 0600 and
+mode-0600 MCP config under ignored `data/`, loads it with strict MCP isolation, removes built-in
+tools, and preapproves only the seven OpenLoop tools. User/project settings sources, hooks,
+auto-memory, Git instructions, and Chrome integration are disabled for this managed Claude session.
+The random bridge bearer token is also mode 0600 and
 persists locally so an existing fixed tmux session remains valid across server restarts. Both CLIs
 retain their normal local login and credential storage.
 

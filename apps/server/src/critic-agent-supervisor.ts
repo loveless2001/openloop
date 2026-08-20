@@ -10,6 +10,10 @@ export const CRITIC_AGENT_SESSION_NAME = "openloop-critic" as const;
 export const CRITIC_AGENT_ATTACH_COMMAND =
   "tmux attach -t openloop-critic" as const;
 
+function supportsTmux(platform: NodeJS.Platform): boolean {
+  return platform === "linux" || platform === "darwin";
+}
+
 export function criticAgentPaneTarget(sessionName: string): string {
   return sessionName;
 }
@@ -116,11 +120,12 @@ export class CriticAgentSupervisor implements CriticAgentController {
       sessionName: CRITIC_AGENT_SESSION_NAME,
       attachCommand: CRITIC_AGENT_ATTACH_COMMAND,
     } as const;
-    if ((this.options.platform ?? process.platform) !== "linux") {
+    if (!supportsTmux(this.options.platform ?? process.platform)) {
       return {
         ...base,
         state: "unsupported",
-        message: "The managed critic terminal is currently Linux-only.",
+        message:
+          "The managed critic terminal requires tmux on macOS or Linux. On Windows, run OpenLoop inside WSL to use the CLI critic.",
       };
     }
 

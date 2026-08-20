@@ -28,7 +28,9 @@ describe("critic agent launch configuration", () => {
 
     expect(first).toMatch(/^[0-9a-f]{64}$/);
     expect(second).toBe(first);
-    expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(tokenPath).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("injects the Codex MCP URL and an environment-owned bearer token", () => {
@@ -58,10 +60,12 @@ describe("critic agent launch configuration", () => {
     expect(config.workingDirectory).toBe(
       join(tmpdir(), "openloop-critic-runtime"),
     );
-    expect(statSync(config.workingDirectory).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect(statSync(config.workingDirectory).mode & 0o777).toBe(0o700);
+    }
   });
 
-  it("writes a private Claude MCP config under ignored local data", () => {
+  it("writes an isolated Claude MCP config under ignored local data", () => {
     const workspaceRoot = mkdtempSync(join(tmpdir(), "openloop-mcp-config-"));
     directories.push(workspaceRoot);
     const config = createCriticAgentLaunchConfig({
@@ -74,21 +78,33 @@ describe("critic agent launch configuration", () => {
     expect(config.args).toEqual([
       "--mcp-config",
       configPath,
+      "--strict-mcp-config",
+      "--setting-sources",
+      "",
+      "--settings",
+      '{"autoMemoryEnabled":false,"disableAllHooks":true,"includeGitInstructions":false}',
       "--permission-mode",
-      "manual",
+      "default",
       "--allowed-tools",
       "mcp__openloop__openloop_critic_next,mcp__openloop__openloop_critic_context,mcp__openloop__openloop_critic_submit,mcp__openloop__openloop_critic_fail,mcp__openloop__openloop_issue_chat_next,mcp__openloop__openloop_issue_chat_submit,mcp__openloop__openloop_issue_chat_fail",
       "--tools",
       "",
+      "--no-chrome",
     ]);
     expect(JSON.parse(readFileSync(configPath, "utf8"))).toMatchObject({
       mcpServers: {
         openloop: {
+          type: "http",
+          url: "http://127.0.0.1:8787/mcp",
           headers: { Authorization: "Bearer secret" },
         },
       },
     });
-    expect(statSync(configPath).mode & 0o777).toBe(0o600);
+    expect(config.environment).toEqual({});
+    expect(config.args.join(" ")).not.toContain("secret");
+    if (process.platform !== "win32") {
+      expect(statSync(configPath).mode & 0o777).toBe(0o600);
+    }
     expect(config.workingDirectory).toBe(
       join(tmpdir(), "openloop-critic-runtime"),
     );
