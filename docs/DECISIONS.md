@@ -141,9 +141,9 @@ in a private temporary directory rather than the Git workspace, and Codex startu
 disabled so update and repository-trust prompts cannot create a false-ready worker. Launch is
 detached and idempotent, status is obtained from tmux, and the UI publishes
 `tmux attach -t openloop-critic` for authentication or inspection. The CLI continues to own its
-credentials. Codex preapproves only the explicit seven-tool OpenLoop MCP allowlist while retaining
+credentials. Codex preapproves only the explicit ten-tool OpenLoop MCP allowlist while retaining
 its read-only sandbox; global approval and sandbox bypass is not used. Claude Code uses its native
-MCP JSON and flags: strict MCP loading, no built-in tools, an exact seven-tool preapproval list, and
+MCP JSON and flags: strict MCP loading, no built-in tools, an exact ten-tool preapproval list, and
 no user/project settings sources, hooks, auto-memory, Git instructions, or Chrome integration. The
 browser cannot supply a command, arguments, MCP URL, or token.
 
@@ -178,3 +178,17 @@ writer actions change the issue lifecycle. Messages and selected-text
 attachments are persisted in SQLite; each CLI turn receives the issue plus at most twenty saved
 messages. This makes the database authoritative, prevents hidden context from leaking across issues,
 and lets an automatic critique temporarily use the same CLI without losing the visible conversation.
+
+## 023 — Reconcile the existing issue after bounded deterministic anchor recovery
+
+Saving changed blocks first searches only the affected node, an explicit merge survivor, and two
+neighboring blocks in the original heading. Exact quote recovery only updates offsets; fuzzy recovery
+uses the specification's weighted token/context score and records `anchor_remapped`. A failed bounded
+search marks the anchor detached and `needs_review` instead of searching the full document or silently
+closing the objection.
+
+Materially changed and detached issues enter a two-second per-document queue. Batches are capped at
+five sequential smart-model calls and stale model results are discarded and requeued against the
+newest version. Reconciliation state and its append-only event commit together, and low-confidence
+severity-five closure becomes uncertain. Codex and Claude receive the same operation through three
+additional leased MCP tools, preserving the server's sole authority over issue state.

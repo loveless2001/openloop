@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the implemented Phase 0–3 slice plus the current Markdown/file workflow.
+This document describes the implemented Phase 0–4 slice plus the current Markdown/file workflow.
 
 The browser owns the TipTap editor, stable node IDs, changed-node tracking, dirty state, and
 autosave scheduling. It sends canonical TipTap JSON, derived text, a base version, and an
@@ -64,10 +64,10 @@ browser. The process runs in a private temporary runtime directory rather than t
 since its only document access is the bounded MCP bridge. Codex startup update checks are disabled
 to prevent an interactive update prompt from blocking job claims. Codex receives the loopback MCP
 URL through CLI config
-overrides, an explicit seven-tool allowlist, and per-server MCP preapproval; it retains the read-only
+overrides, an explicit ten-tool allowlist, and per-server MCP preapproval; it retains the read-only
 sandbox. Its ephemeral bearer token arrives through an environment variable. Claude receives a
 mode-0600 MCP config under ignored `data/`, loads it with strict MCP isolation, removes built-in
-tools, and preapproves only the seven OpenLoop tools. User/project settings sources, hooks,
+tools, and preapproves only the ten OpenLoop tools. User/project settings sources, hooks,
 auto-memory, Git instructions, and Chrome integration are disabled for this managed Claude session.
 The random bridge bearer token is also mode 0600 and
 persists locally so an existing fixed tmux session remains valid across server restarts. Both CLIs
@@ -81,7 +81,9 @@ fail tools for issue chat. The worker claims exactly one job per wake. Unknown, 
 mismatched leases are rejected. Critique jobs contain only focused blocks and server-selected
 relevant open issues. If neighboring prose is required to disambiguate the focus, the
 adapter-neutral context-provider boundary lets the CLI request at most two windows of six blocks per
-side. The browser polls process and bridge states but never receives the MCP bearer token.
+side. Three additional leased tools let the same bounded worker classify one existing issue during
+reconciliation without creating issues or mutating the ledger. The browser polls process and bridge
+states but never receives the MCP bearer token.
 
 Each issue has a persisted conversation whose state is independent of issue status. The browser
 keeps exactly one current issue chat in a floating workspace window, which may be expanded or
@@ -122,3 +124,16 @@ and canonical saved TipTap JSON, deterministically deduplicates them, and persis
 All issue actions pass through the pure `transitionIssue` state machine and append their event in
 the same SQLite transaction. Apply rewrite returns a validated editor operation; the server never
 mutates document JSON on the model's behalf.
+
+Document saves perform Phase 4 anchor maintenance in the same SQLite transaction as the versioned
+content update. Only issues attached to changed, removed, or merged node IDs are inspected. Pure core
+logic tries exact offsets, fuzzy same-node recovery, the reported merge survivor, and at most two
+neighboring blocks in the original heading before marking an anchor detached. Remaps append
+`anchor_remapped`; the save response reports issue IDs that need semantic reconciliation.
+
+A per-document reconciliation queue debounces for two seconds, merges repeated requests, and runs at
+most five issues sequentially per batch. Each model call uses the configured smart critic adapter,
+records hashed-input model metadata, and rechecks the document version before applying a result.
+Persistence of the new issue state and its `reconciled_*` event is transactional. Severity-five
+issues require at least 0.7 confidence before reconciliation may resolve or invalidate them. SSE
+publishes the resulting update while model failure leaves editing available and the issue reviewable.

@@ -45,6 +45,7 @@ beforeAll(async () => {
     logger: false,
     criticAgentSupervisor,
     mcpBearerToken: "test-token",
+    reconciliationIdleMs: 0,
   });
   await server.ready();
 });
@@ -458,6 +459,140 @@ describe("Phase 0/1 server", () => {
       url: `/v1/documents/${documentId}/issues`,
     });
     expect(response.json().issues).toEqual([]);
+  });
+
+  it("remaps changed anchors and reconciles the original issue to resolved", async () => {
+    const nodeId = "a1ada4ce-7f27-41ec-9a6d-6034fac83f62";
+    const originalText =
+      "The whole product is model agnostic, so any model will work equally well.";
+    const createdResponse = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Reconciliation note",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { nodeId },
+              content: [{ type: "text", text: originalText }],
+            },
+          ],
+        },
+      },
+    });
+    const documentId = createdResponse.json().id as string;
+    await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/critic-jobs`,
+      payload: {
+        requestId: "fc8fc369-cf07-43ca-9870-7323d16706fe",
+        documentVersion: 0,
+        trigger: "manual",
+        scope: { kind: "changes" },
+        changedBlocks: [
+          {
+            nodeId,
+            nodeType: "paragraph",
+            text: originalText,
+            previousText: "",
+            headingPath: [],
+          },
+        ],
+      },
+    });
+
+    let issueId = "";
+    await vi.waitFor(async () => {
+      const response = await server.inject({
+        method: "GET",
+        url: `/v1/documents/${documentId}/issues`,
+      });
+      const issue = response.json().issues[0];
+      expect(issue).toBeDefined();
+      issueId = issue.id;
+    });
+
+    const staleRequest = await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/reconcile`,
+      payload: { documentVersion: 9, issueIds: [issueId], changedBlocks: [] },
+    });
+    expect(staleRequest.statusCode).toBe(409);
+
+    const manualRequest = await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/reconcile`,
+      payload: { documentVersion: 0, issueIds: [issueId], changedBlocks: [] },
+    });
+    expect(manualRequest.statusCode).toBe(202);
+    expect(manualRequest.json()).toMatchObject({ status: "queued" });
+
+    const revisedText =
+      "The harness is API-compatible across providers, but model quality still differs.";
+    const saveResponse = await server.inject({
+      method: "PUT",
+      url: `/v1/documents/${documentId}`,
+      payload: {
+        baseVersion: 0,
+        title: "Reconciliation note",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { nodeId },
+              content: [{ type: "text", text: revisedText }],
+            },
+          ],
+        },
+        plainText: revisedText,
+        changeBatch: {
+          documentId,
+          baseVersion: 0,
+          clientSequence: 1,
+          changedBlocks: [
+            {
+              nodeId,
+              nodeType: "paragraph",
+              text: revisedText,
+              previousText: originalText,
+              headingPath: [],
+            },
+          ],
+          removedNodeIds: [],
+          mergedNodeMap: {},
+          reason: "typing",
+        },
+      },
+    });
+    expect(saveResponse.statusCode).toBe(200);
+    expect(saveResponse.json().impactedIssueIds).toContain(issueId);
+
+    await vi.waitFor(async () => {
+      const response = await server.inject({
+        method: "GET",
+        url: `/v1/documents/${documentId}/issues`,
+      });
+      expect(response.json().issues[0]).toMatchObject({
+        id: issueId,
+        status: "resolved",
+      });
+    });
+    const events = await server.inject({
+      method: "GET",
+      url: `/v1/issues/${issueId}/events`,
+    });
+    expect(
+      events.json().events.map((event: { action: string }) => event.action),
+    ).toContain("reconciled_resolved");
+    const modelRun = database.sqlite
+      .prepare(
+        "select status from model_runs where document_id = ? and kind = 'reconcile' order by created_at desc limit 1",
+      )
+      .get(documentId) as { status: string };
+    expect(modelRun.status).toBe("completed");
   });
 
   it("creates, loads, and saves canonical document content", async () => {

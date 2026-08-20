@@ -31,6 +31,7 @@ type IssueCandidate = z.infer<typeof IssueCandidateSchema>;
 export interface PersistedCriticIssue {
   kind: "created" | "updated";
   issue: IssueRecord;
+  needsReconciliation: boolean;
 }
 
 function sha256(value: string): string {
@@ -91,10 +92,20 @@ function updateDuplicate(
   database: Database,
   duplicate: IssueRecord,
   candidate: IssueCandidate,
-): IssueRecord | undefined {
+): { issue: IssueRecord; needsReconciliation: boolean } | undefined {
   const severityEscalated = candidate.severity > duplicate.severity;
   const confidence = Math.max(duplicate.confidence, candidate.confidence);
-  if (!severityEscalated && confidence === duplicate.confidence) return;
+  const wordingChanged =
+    normalizeIssueText(candidate.anchorQuote) !==
+      normalizeIssueText(duplicate.anchor.quote) ||
+    coreQuestion(candidate.question) !== coreQuestion(duplicate.question);
+  if (
+    !severityEscalated &&
+    confidence === duplicate.confidence &&
+    !wordingChanged
+  ) {
+    return;
+  }
   const updated: IssueRecord = {
     ...duplicate,
     severity: Math.max(
@@ -125,7 +136,7 @@ function updateDuplicate(
     .set(issueValues(updated))
     .where(eq(issues.id, updated.id))
     .run();
-  return updated;
+  return { issue: updated, needsReconciliation: wordingChanged };
 }
 
 function createIssue(input: {
@@ -278,7 +289,7 @@ export function persistCriticCandidates(
     );
     if (duplicate) {
       const updated = updateDuplicate(database, duplicate, candidate);
-      if (updated) results.push({ kind: "updated", issue: updated });
+      if (updated) results.push({ kind: "updated", ...updated });
       continue;
     }
     if (
@@ -303,7 +314,7 @@ export function persistCriticCandidates(
     });
     insertIssue(database, issue, input.documentVersion);
     current.push(issue);
-    results.push({ kind: "created", issue });
+    results.push({ kind: "created", issue, needsReconciliation: false });
   }
   return results;
 }

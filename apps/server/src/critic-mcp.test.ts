@@ -269,4 +269,101 @@ describe("critic MCP bridge", () => {
       content: "Please attach the evidence paragraph.",
     });
   });
+
+  it("claims and submits a strict reconciliation result", async () => {
+    const nodeId = "5c28481b-bb83-41ee-947e-c580fdd77d88";
+    const pending = broker.enqueueReconciliation(
+      {
+        requestId: "4727c9ad-c5d1-4686-aa5a-c3c3e199de63",
+        documentVersion: 3,
+        issue: {
+          id: "02012b39-f76c-40ac-99c4-da9e06395379",
+          documentId: "d377345f-c61a-4fb5-a3ac-9a17f5ada4c5",
+          type: "ambiguity",
+          status: "needs_review",
+          question: "Does compatibility imply equal quality?",
+          rationale: "Those are different claims.",
+          severity: 4,
+          confidence: 0.9,
+          interruptWorthiness: 0.9,
+          anchor: {
+            nodeId,
+            quote: "any model will work equally well",
+            leftContext: "",
+            rightContext: "",
+            normalizedFingerprint: "a".repeat(64),
+            sourceDocumentVersion: 2,
+            detached: true,
+          },
+          keywords: ["model", "quality"],
+          resurfaceTriggers: ["claim_reused"],
+          dedupeKey: "b".repeat(64),
+          shownCount: 1,
+          silentIgnoreCount: 0,
+          createdAt: "2026-08-20T00:00:00.000Z",
+          updatedAt: "2026-08-20T00:00:00.000Z",
+        },
+        currentBlock: {
+          nodeId,
+          nodeType: "paragraph",
+          text: "The API is compatible, while model quality differs.",
+          headingPath: [],
+        },
+        nearbyBlocks: [],
+      },
+      new AbortController().signal,
+    );
+    const headers = {
+      authorization: `Bearer ${token}`,
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25",
+    };
+    const claimedResponse = await server.inject({
+      method: "POST",
+      url: "/mcp",
+      headers,
+      payload: {
+        jsonrpc: "2.0",
+        id: 8,
+        method: "tools/call",
+        params: { name: "openloop_reconcile_next", arguments: {} },
+      },
+    });
+    const claimed = payload(claimedResponse.body).result as {
+      structuredContent: { jobId: string; leaseToken: string };
+    };
+    expect(claimed.structuredContent.jobId).toBe(pending.jobId);
+
+    const submittedResponse = await server.inject({
+      method: "POST",
+      url: "/mcp",
+      headers,
+      payload: {
+        jsonrpc: "2.0",
+        id: 9,
+        method: "tools/call",
+        params: {
+          name: "openloop_reconcile_submit",
+          arguments: {
+            jobId: claimed.structuredContent.jobId,
+            leaseToken: claimed.structuredContent.leaseToken,
+            result: {
+              outcome: "resolved",
+              reason:
+                "The revised wording separates compatibility from quality.",
+              confidence: 0.96,
+            },
+          },
+        },
+      },
+    });
+    expect(payload(submittedResponse.body)).toMatchObject({
+      result: { structuredContent: { accepted: true, hasPending: false } },
+    });
+    await expect(pending.result).resolves.toMatchObject({
+      outcome: "resolved",
+      confidence: 0.96,
+    });
+  });
 });

@@ -50,7 +50,7 @@ describe("critic agent launch configuration", () => {
       'mcp_servers.openloop.bearer_token_env_var="OPENLOOP_MCP_TOKEN"',
     );
     expect(config.args).toContain(
-      'mcp_servers.openloop.enabled_tools=["openloop_critic_next","openloop_critic_context","openloop_critic_submit","openloop_critic_fail","openloop_issue_chat_next","openloop_issue_chat_submit","openloop_issue_chat_fail"]',
+      'mcp_servers.openloop.enabled_tools=["openloop_critic_next","openloop_critic_context","openloop_critic_submit","openloop_critic_fail","openloop_reconcile_next","openloop_reconcile_submit","openloop_reconcile_fail","openloop_issue_chat_next","openloop_issue_chat_submit","openloop_issue_chat_fail"]',
     );
     expect(config.args).toContain(
       'mcp_servers.openloop.default_tools_approval_mode="approve"',
@@ -86,7 +86,7 @@ describe("critic agent launch configuration", () => {
       "--permission-mode",
       "default",
       "--allowed-tools",
-      "mcp__openloop__openloop_critic_next,mcp__openloop__openloop_critic_context,mcp__openloop__openloop_critic_submit,mcp__openloop__openloop_critic_fail,mcp__openloop__openloop_issue_chat_next,mcp__openloop__openloop_issue_chat_submit,mcp__openloop__openloop_issue_chat_fail",
+      "mcp__openloop__openloop_critic_next,mcp__openloop__openloop_critic_context,mcp__openloop__openloop_critic_submit,mcp__openloop__openloop_critic_fail,mcp__openloop__openloop_reconcile_next,mcp__openloop__openloop_reconcile_submit,mcp__openloop__openloop_reconcile_fail,mcp__openloop__openloop_issue_chat_next,mcp__openloop__openloop_issue_chat_submit,mcp__openloop__openloop_issue_chat_fail",
       "--tools",
       "",
       "--no-chrome",

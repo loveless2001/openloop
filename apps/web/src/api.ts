@@ -10,6 +10,7 @@ import {
   IssueEventsResponseSchema,
   IssueListResponseSchema,
   ModelStatusResponseSchema,
+  ReconcileJobResponseSchema,
   SaveDocumentResponseSchema,
   type CriticJobRequest,
   type CriticAgentStatusResponse,
@@ -20,6 +21,7 @@ import {
   type EditorChangeBatch,
   type JsonValue,
   type ModelStatusResponse,
+  type ReconcileRequest,
 } from "@openloop/shared";
 
 export class ApiClientError extends Error {
@@ -57,6 +59,18 @@ export async function submitCriticJob(
     body: JSON.stringify(input),
   });
   return CriticJobResponseSchema.parse(await parseResponse(response)).jobId;
+}
+
+export async function submitReconciliation(
+  documentId: string,
+  input: ReconcileRequest,
+): Promise<string> {
+  const response = await fetch(`/v1/documents/${documentId}/reconcile`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return ReconcileJobResponseSchema.parse(await parseResponse(response)).jobId;
 }
 
 export async function loadIssues(

@@ -8,3 +8,13 @@ export {
   transitionIssue,
 } from "./issues.js";
 export type { IssueDomainEvent, IssueTransitionResult } from "./issues.js";
+export {
+  applyReconciliationResult,
+  normalizedLevenshteinSimilarity,
+  remapIssueAnchor,
+} from "./reconciliation.js";
+export type {
+  AnchorRemapKind,
+  AnchorRemapResult,
+  ReconciliationTransitionResult,
+} from "./reconciliation.js";

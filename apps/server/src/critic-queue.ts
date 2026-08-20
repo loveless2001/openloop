@@ -47,6 +47,12 @@ export class CriticQueue {
     private readonly logger?: {
       info: (metadata: object, message: string) => void;
     },
+    private readonly enqueueReconciliation?: (input: {
+      documentId: string;
+      documentVersion: number;
+      issueIds: string[];
+      changedBlocks: TextBlockSnapshot[];
+    }) => void,
   ) {}
 
   enqueue(documentId: string, request: CriticJobRequest): string {
@@ -127,6 +133,17 @@ export class CriticQueue {
             data: { issue: result.issue, jobId: job.id },
           });
         }
+      }
+      const reconciliationIds = persisted
+        .filter((result) => result.needsReconciliation)
+        .map((result) => result.issue.id);
+      if (reconciliationIds.length > 0) {
+        this.enqueueReconciliation?.({
+          documentId: job.documentId,
+          documentVersion: job.request.documentVersion,
+          issueIds: reconciliationIds,
+          changedBlocks: job.request.changedBlocks,
+        });
       }
     } catch (error) {
       const modelError =

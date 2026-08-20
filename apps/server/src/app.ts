@@ -14,6 +14,7 @@ import {
 } from "./critic-agent-supervisor.js";
 import { CriticEventBroker } from "./critic-events.js";
 import { CriticQueue } from "./critic-queue.js";
+import { ReconciliationQueue } from "./reconciliation-queue.js";
 import { openDatabase, type Database } from "./db/client.js";
 import { applyMigrations } from "./db/migrations.js";
 import {
@@ -40,6 +41,7 @@ interface BuildServerOptions {
   criticAgentBroker?: CriticAgentBroker;
   issueChatAgentBroker?: IssueChatAgentBroker;
   mcpBearerToken?: string;
+  reconciliationIdleMs?: number;
 }
 
 export function buildServer({
@@ -52,6 +54,7 @@ export function buildServer({
   criticAgentBroker,
   issueChatAgentBroker,
   mcpBearerToken,
+  reconciliationIdleMs,
 }: BuildServerOptions) {
   const ownsDatabase = database === undefined;
   const activeDatabase = database ?? openDatabase(environment.DATABASE_URL);
@@ -99,11 +102,9 @@ export function buildServer({
               adapter: new CliCriticAdapter(
                 activeCriticAgentBroker,
                 criticCliCoordinator,
-                () =>
+                (prompt) =>
                   activeCriticAgentSupervisor.wake
-                    ? activeCriticAgentSupervisor.wake(
-                        "Call openloop_critic_next now. If it returns a claimed job, assess only that job. If the focused text is unclear without neighboring prose, request only the necessary blocks with openloop_critic_context. Then call openloop_critic_submit or openloop_critic_fail with its jobId and leaseToken. Do not edit files or the issue ledger. Stop immediately after the tool result and do not claim another job in this turn.",
-                      )
+                    ? activeCriticAgentSupervisor.wake(prompt)
                     : Promise.reject(
                         new Error(
                           "The injected critic controller cannot wake a CLI.",
@@ -126,11 +127,21 @@ export function buildServer({
     });
   }
   const criticBroker = new CriticEventBroker();
+  const reconciliationQueue = new ReconciliationQueue(
+    activeDatabase,
+    activeModel,
+    criticBroker,
+    reconciliationIdleMs,
+    server.log,
+  );
   const criticQueue = new CriticQueue(
     activeDatabase,
     activeModel,
     criticBroker,
     server.log,
+    (input) => {
+      reconciliationQueue.enqueue(input);
+    },
   );
   server.get("/v1/health", async () => ({ status: "ok" as const }));
   server.get("/v1/model-status", async () => {
@@ -154,14 +165,25 @@ export function buildServer({
             : "remote",
     };
   });
-  registerDocumentRoutes(server, activeDatabase);
+  registerDocumentRoutes(
+    server,
+    activeDatabase,
+    reconciliationQueue,
+    criticBroker,
+  );
   registerCompletionRoutes(
     server,
     activeDatabase,
     activeModel,
     activeTrainingTraceWriter,
   );
-  registerCriticRoutes(server, activeDatabase, criticQueue, criticBroker);
+  registerCriticRoutes(
+    server,
+    activeDatabase,
+    criticQueue,
+    reconciliationQueue,
+    criticBroker,
+  );
   registerCriticAgentRoutes(
     server,
     activeCriticAgentSupervisor,
@@ -187,6 +209,7 @@ export function buildServer({
   );
 
   server.addHook("onClose", async () => {
+    reconciliationQueue.close();
     activeCriticAgentBroker.close();
     activeIssueChatAgentBroker.close();
     await activeTrainingTraceWriter.flush();

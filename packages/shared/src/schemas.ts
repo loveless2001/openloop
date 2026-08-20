@@ -426,6 +426,19 @@ export const ReconcileResultSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+export const ReconcileRequestSchema = z.object({
+  documentVersion: z.number().int().nonnegative(),
+  issueIds: z.array(z.uuid()).min(1).max(100),
+  changedBlocks: z.array(TextBlockSnapshotSchema).max(250),
+});
+
+export type ReconcileRequest = z.infer<typeof ReconcileRequestSchema>;
+
+export const ReconcileJobResponseSchema = z.object({
+  jobId: z.uuid(),
+  status: z.literal("queued"),
+});
+
 export const CompletionStreamRequestSchema = z.object({
   requestId: z.uuid(),
   documentId: z.uuid(),

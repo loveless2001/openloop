@@ -1,17 +1,17 @@
 # OpenLoop
 
 OpenLoop is a local-first, stateful LLM co-writer harness. This repository currently implements
-Phases 0–3 from `openloop-cowriter-harness-spec.md`: workspace and persistence, editor
-persistence, inline completion, and the critic issue ledger. The current iteration also adds a
+Phases 0–4 from `openloop-cowriter-harness-spec.md`: workspace and persistence, editor
+persistence, inline completion, the critic issue ledger, and anchor reconciliation. The current iteration also adds a
 Markdown-first file workflow and small-model local autocomplete through Ollama.
 
 The current vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
 versions; local SQLite persistence; streamed ghost-text completion; queued changed-block critique;
 anchored gutter markers; persistent issue actions and history; and visible dirty, saving, conflict,
-and error states. Markdown files can be opened and downloaded from the File menu. Anchor
-reconciliation, resurfacing, and the formal unresolved-issue export review belong to later phases
-and are intentionally not implemented.
+and error states. Markdown files can be opened and downloaded from the File menu. Resurfacing and
+the formal unresolved-issue export review belong to later phases and are intentionally not
+implemented.
 
 ## Requirements
 
@@ -107,7 +107,7 @@ For Claude Code, authenticate once with `claude auth login`, then set
 **Start claude CLI**.
 
 Claude Code receives its own launch contract rather than Codex flags: only the generated OpenLoop
-MCP configuration is loaded, all built-in tools are removed, and exactly the seven bridge tools are
+MCP configuration is loaded, all built-in tools are removed, and exactly the ten bridge tools are
 preapproved. User/project settings sources, hooks, auto-memory, Git instructions, and Chrome
 integration are disabled for the managed session. Claude Code's normal account authentication is
 still used; run `claude auth login` before launching the managed critic if necessary.
@@ -117,9 +117,9 @@ because document context arrives only through MCP. Codex startup update checks a
 managed session so an update or repository-trust prompt cannot masquerade as a ready worker. Login
 remains user-owned and may still require attaching once.
 
-The server gives the CLI seven bearer-authenticated MCP tools: four for bounded document criticism
-(claim, nearby context, submit candidates, and fail) and three for issue chat (claim, submit a reply,
-and fail). The Codex launch allowlists and preapproves exactly those tools, avoiding interactive MCP
+The server gives the CLI ten bearer-authenticated MCP tools: four for bounded document criticism
+(claim, nearby context, submit candidates, and fail), three for reconciliation, and three for issue
+chat. The Codex launch allowlists and preapproves exactly those tools, avoiding interactive MCP
 permission prompts without disabling its read-only sandbox. Claude uses the corresponding native
 Claude Code restrictions described above. Context expansion is lease-bound,
 limited to two requests and six blocks per side, and never exposes a general document or ledger
@@ -198,6 +198,13 @@ and are not sent until **Send**. The critic can ask for a focused clarification,
 offers Apply rewrite, Later, Dismiss, Resolve, or Reopen without granting the critic status authority.
 Issue state, events, messages, and attachments already sent survive refresh.
 
+When a saved change touches an active issue's anchor, OpenLoop first tries exact, fuzzy same-node,
+merged-node, and bounded neighboring-block remapping. Materially changed or detached anchors enter a
+two-second, five-issue reconciliation queue. The configured mock, OpenAI-compatible, Codex CLI, or
+Claude CLI critic classifies the existing issue as persisting, resolved, invalidated, or uncertain;
+the original issue ID and append-only history are retained. Detached or uncertain issues remain in
+the Open filter as **needs review** and never close silently.
+
 ## Verification
 
 ```bash
@@ -211,9 +218,9 @@ The focused tests cover shared request schemas, document persistence, stable nod
 changed-node accumulation, model adapter validation and cancellation, completion SSE, ghost-text
 acceptance/dismissal/staleness, issue state transitions, critic filtering/deduplication, persistent
 actions/history, MCP bearer and lease enforcement, CLI job routing, stale-result rejection, and
-gutter rendering. The Playwright workflow is reserved for Phase 6, so
-`pnpm test:e2e` is present as the specified repository command but does not yet have an end-to-end
-browser test.
+gutter rendering. Two Playwright tests cover focused selection critique and persisted issue chat.
+The specification's full defer, resurface, resolve, and export browser scenario remains Phase 5–6
+work.
 
 ## Workspace
 
@@ -228,4 +235,4 @@ data                     Local SQLite files (ignored)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the implemented runtime boundaries and
-[docs/DECISIONS.md](docs/DECISIONS.md) for Phase 0–3 choices.
+[docs/DECISIONS.md](docs/DECISIONS.md) for implementation choices.

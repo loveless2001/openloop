@@ -50,6 +50,7 @@ beforeAll(async () => {
     criticAgentBroker: broker,
     criticAgentSupervisor: supervisor,
     mcpBearerToken: "test-token",
+    reconciliationIdleMs: 0,
   });
   await server.ready();
 });
@@ -216,6 +217,79 @@ describe("CLI critic integration", () => {
         .get("13b14ccc-e6d9-4a86-9e0c-e0401ee11e52") as
         { status: string } | undefined;
       expect(run?.status).toBe("completed");
+    });
+
+    const revised =
+      "The API-compatible boundary is shared, while model quality still differs.";
+    const save = await server.inject({
+      method: "PUT",
+      url: `/v1/documents/${documentId}`,
+      payload: {
+        baseVersion: 0,
+        title: "CLI critique",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { nodeId: beforeId },
+              content: [
+                { type: "text", text: "This compares two local models." },
+              ],
+            },
+            {
+              type: "paragraph",
+              attrs: { nodeId },
+              content: [{ type: "text", text: revised }],
+            },
+            {
+              type: "paragraph",
+              attrs: { nodeId: afterId },
+              content: [
+                { type: "text", text: "Latency is measured separately." },
+              ],
+            },
+          ],
+        },
+        plainText: revised,
+        changeBatch: {
+          documentId,
+          baseVersion: 0,
+          clientSequence: 1,
+          changedBlocks: [
+            {
+              nodeId,
+              nodeType: "paragraph",
+              text: revised,
+              previousText: text,
+              headingPath: [],
+            },
+          ],
+          removedNodeIds: [],
+          mergedNodeMap: {},
+          reason: "typing",
+        },
+      },
+    });
+    expect(save.json().impactedIssueIds).toContain(issues.json().issues[0].id);
+    await vi.waitFor(() => expect(wake).toHaveBeenCalledTimes(3));
+    const reconciliation = broker.claimReconciliation();
+    expect(reconciliation?.job.currentBlock?.text).toBe(revised);
+    broker.submitReconciliation(
+      reconciliation!.jobId,
+      reconciliation!.leaseToken,
+      {
+        outcome: "resolved",
+        reason: "The revision separates interface compatibility from quality.",
+        confidence: 0.95,
+      },
+    );
+    await vi.waitFor(async () => {
+      const response = await server.inject({
+        method: "GET",
+        url: `/v1/documents/${documentId}/issues`,
+      });
+      expect(response.json().issues[0].status).toBe("resolved");
     });
   });
 

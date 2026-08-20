@@ -15,6 +15,8 @@ import {
   IssueChatReplySchema,
   IssueStatus,
   IssueType,
+  IssueRecordSchema,
+  ReconcileResultSchema,
   TextBlockSnapshotSchema,
 } from "@openloop/shared";
 import type { FastifyInstance } from "fastify";
@@ -109,6 +111,25 @@ const IssueChatClaimOutputSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
+const ReconcileInputSchema = z.object({
+  requestId: z.uuid(),
+  documentVersion: z.number().int().nonnegative(),
+  issue: IssueRecordSchema,
+  currentBlock: TextBlockSnapshotSchema.optional(),
+  nearbyBlocks: z.array(TextBlockSnapshotSchema).max(5),
+});
+
+const ReconcileClaimOutputSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("idle") }),
+  z.object({
+    status: z.literal("claimed"),
+    jobId: z.uuid(),
+    leaseToken: z.string().length(64),
+    leaseExpiresAt: z.iso.datetime(),
+    job: ReconcileInputSchema,
+  }),
+]);
+
 function result(payload: Record<string, unknown>): CallToolResult {
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
@@ -139,7 +160,83 @@ export function createCriticMcpServer(
     { name: "openloop-critic", version: "0.1.0" },
     {
       instructions:
-        "You are OpenLoop's critic worker. OpenLoop will explicitly tell you whether to claim a document critique or an issue-chat turn. For a document critique, call openloop_critic_next, use only its changedBlocks and relevant openIssues, request bounded context only when necessary, and finish with openloop_critic_submit or openloop_critic_fail. For an issue-chat turn, call openloop_issue_chat_next, answer the user's latest message in light of the bounded thread and attachments, and finish with openloop_issue_chat_submit or openloop_issue_chat_fail. Use kind=clarification when more user context is genuinely needed. Never edit the document or issue ledger, never change issue status, never claim a second job in the same turn, and never poll after an idle result.",
+        "You are OpenLoop's critic worker. OpenLoop will explicitly tell you whether to claim a document critique, reconcile one existing issue, or answer an issue-chat turn. For a document critique, use the openloop_critic tools and only the supplied bounded context. For reconciliation, use the openloop_reconcile tools and classify only the supplied existing issue as persists, resolved, invalidated, or uncertain. For issue chat, use the openloop_issue_chat tools. Never edit the document or issue ledger, never claim a second job in the same turn, and never poll after an idle result.",
+    },
+  );
+
+  server.registerTool(
+    "openloop_reconcile_next",
+    {
+      title: "Claim the next OpenLoop reconciliation job",
+      description:
+        "Claim one existing issue that must be checked against revised bounded document context. Call once when OpenLoop wakes you; do not poll.",
+      inputSchema: z.object({}),
+      outputSchema: ReconcileClaimOutputSchema,
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async () => {
+      const claim = broker.claimReconciliation();
+      return result(
+        claim ? { status: "claimed", ...claim } : { status: "idle" },
+      );
+    },
+  );
+
+  server.registerTool(
+    "openloop_reconcile_submit",
+    {
+      title: "Submit an OpenLoop reconciliation result",
+      description:
+        "Complete a claimed reconciliation with one strict persists, resolved, invalidated, or uncertain result.",
+      inputSchema: z.object({
+        jobId: z.uuid(),
+        leaseToken: z.string().length(64),
+        result: ReconcileResultSchema,
+      }),
+      outputSchema: AcknowledgementSchema,
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ jobId, leaseToken, result: reconciliationResult }) => {
+      try {
+        const hasPending = broker.submitReconciliation(
+          jobId,
+          leaseToken,
+          reconciliationResult,
+        );
+        return result({ accepted: true, jobId, hasPending });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "openloop_reconcile_fail",
+    {
+      title: "Fail an OpenLoop reconciliation job",
+      description:
+        "Release a claimed reconciliation job when it cannot be classified.",
+      inputSchema: z.object({
+        jobId: z.uuid(),
+        leaseToken: z.string().length(64),
+        code: FailureCodeSchema,
+        message: z.string().min(1).max(500),
+      }),
+      outputSchema: AcknowledgementSchema,
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    },
+    async ({ jobId, leaseToken, code, message }) => {
+      try {
+        const hasPending = broker.failReconciliation(
+          jobId,
+          leaseToken,
+          code,
+          message,
+        );
+        return result({ accepted: true, jobId, hasPending });
+      } catch (error) {
+        return toolError(error);
+      }
     },
   );
 

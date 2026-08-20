@@ -13,6 +13,9 @@ import {
   saveDocument,
 } from "../documents.js";
 import type { Database } from "../db/client.js";
+import type { CriticEventBroker } from "../critic-events.js";
+import type { ReconciliationQueue } from "../reconciliation-queue.js";
+import { remapImpactedIssues } from "../reconciliation.js";
 import { IssueNotFoundError, listIssues } from "../issues.js";
 
 const DocumentParamsSchema = z.object({ documentId: z.uuid() });
@@ -20,6 +23,8 @@ const DocumentParamsSchema = z.object({ documentId: z.uuid() });
 export function registerDocumentRoutes(
   server: FastifyInstance,
   database: Database,
+  reconciliationQueue: ReconciliationQueue,
+  broker: CriticEventBroker,
 ): void {
   server.post("/v1/documents", async (request, reply) => {
     const input = CreateDocumentRequestSchema.parse(request.body);
@@ -38,9 +43,33 @@ export function registerDocumentRoutes(
   server.put("/v1/documents/:documentId", async (request) => {
     const { documentId } = DocumentParamsSchema.parse(request.params);
     const input = SaveDocumentRequestSchema.parse(request.body);
+    const previousDocument = getDocument(database, documentId);
+    const result = database.sqlite.transaction(() => {
+      const document = saveDocument(database, documentId, input);
+      const remapped = remapImpactedIssues(database, {
+        previousDocument,
+        currentDocument: document,
+        changeBatch: input.changeBatch,
+      });
+      return { document, ...remapped };
+    })();
+    for (const issue of result.updatedIssues) {
+      broker.emit(documentId, {
+        event: "issue_updated",
+        data: { issue, jobId: request.id },
+      });
+    }
+    if (result.impactedIssueIds.length > 0) {
+      reconciliationQueue.enqueue({
+        documentId,
+        documentVersion: result.document.version,
+        issueIds: result.impactedIssueIds,
+        changedBlocks: input.changeBatch.changedBlocks,
+      });
+    }
     return {
-      document: saveDocument(database, documentId, input),
-      impactedIssueIds: [],
+      document: result.document,
+      impactedIssueIds: result.impactedIssueIds,
     };
   });
 

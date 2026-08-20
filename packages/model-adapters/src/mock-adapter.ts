@@ -118,10 +118,15 @@ export class MockModelAdapter implements ModelAdapter {
       };
     }
 
+    const availableText = [
+      currentText,
+      ...input.nearbyBlocks.map((block) => block.text),
+    ]
+      .join("\n")
+      .trim();
     if (
-      currentText &&
-      !currentText.includes(input.issue.anchor.quote) &&
-      !hasRelatedKeywords(input.issue, currentText)
+      !availableText.includes(input.issue.anchor.quote) &&
+      !hasRelatedKeywords(input.issue, availableText)
     ) {
       return {
         outcome: "invalidated" as const,

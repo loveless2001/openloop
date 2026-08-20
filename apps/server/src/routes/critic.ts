@@ -4,6 +4,7 @@ import {
   CriticJobRequestSchema,
   IssueActionRequestSchema,
   IssueStatus,
+  ReconcileRequestSchema,
 } from "@openloop/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -11,12 +12,14 @@ import { z } from "zod";
 import type { CriticEvent, CriticEventBroker } from "../critic-events.js";
 import { CriticQueueFullError } from "../critic-queue.js";
 import type { CriticQueue } from "../critic-queue.js";
+import type { ReconciliationQueue } from "../reconciliation-queue.js";
 import type { Database } from "../db/client.js";
 import { getDocument } from "../documents.js";
 import {
   applyIssueAction,
   IssueActionConflictError,
   IssueNotFoundError,
+  getIssue,
   listIssueEvents,
   listIssues,
 } from "../issues.js";
@@ -33,6 +36,7 @@ export function registerCriticRoutes(
   server: FastifyInstance,
   database: Database,
   queue: CriticQueue,
+  reconciliationQueue: ReconciliationQueue,
   broker: CriticEventBroker,
 ): void {
   server.post(
@@ -98,6 +102,41 @@ export function registerCriticRoutes(
       ? status.split(",").map((value) => IssueStatus.parse(value))
       : undefined;
     return { issues: listIssues(database, documentId, statuses) };
+  });
+
+  server.post("/v1/documents/:documentId/reconcile", async (request, reply) => {
+    const { documentId } = DocumentParamsSchema.parse(request.params);
+    const document = getDocument(database, documentId);
+    const input = ReconcileRequestSchema.parse(request.body);
+    if (input.documentVersion !== document.version) {
+      return reply.code(409).send({
+        error: {
+          code: "DOCUMENT_VERSION_CONFLICT",
+          message: `Document version is ${document.version}.`,
+          requestId: request.id,
+          details: { currentVersion: document.version },
+        },
+      });
+    }
+    for (const issueId of input.issueIds) {
+      const issue = getIssue(database, issueId);
+      if (issue.documentId !== documentId) {
+        return reply.code(404).send({
+          error: {
+            code: "ISSUE_NOT_FOUND",
+            message: "Issue not found in this document.",
+            requestId: request.id,
+          },
+        });
+      }
+    }
+    const jobId = reconciliationQueue.enqueue({
+      documentId,
+      documentVersion: input.documentVersion,
+      issueIds: input.issueIds,
+      changedBlocks: input.changedBlocks,
+    });
+    return reply.code(202).send({ jobId, status: "queued" });
   });
 
   server.get("/v1/issues/:issueId/events", async (request) => {

@@ -26,6 +26,43 @@ const input = {
   openIssues: [],
 };
 
+const reconcileInput = {
+  requestId: "15f15a91-d802-4cd5-9d44-b49a8a818637",
+  documentVersion: 3,
+  issue: {
+    id: "9f9e043a-940f-40df-b060-467563c8943e",
+    documentId: "e99ea5c6-e309-44ef-b1fc-ce78a314437c",
+    type: "ambiguity" as const,
+    status: "needs_review" as const,
+    question: "Does API compatibility imply equal quality?",
+    rationale: "The claims are distinct.",
+    severity: 4 as const,
+    confidence: 0.9,
+    interruptWorthiness: 0.9,
+    anchor: {
+      nodeId: input.changedBlocks[0]!.nodeId,
+      quote: "Any model will work equally well",
+      leftContext: "",
+      rightContext: "",
+      normalizedFingerprint: "a".repeat(64),
+      sourceDocumentVersion: 2,
+      detached: true,
+    },
+    keywords: ["model", "quality"],
+    resurfaceTriggers: ["claim_reused" as const],
+    dedupeKey: "b".repeat(64),
+    shownCount: 1,
+    silentIgnoreCount: 0,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  },
+  currentBlock: {
+    ...input.changedBlocks[0]!,
+    text: "The API is compatible, while quality differs.",
+  },
+  nearbyBlocks: [],
+};
+
 describe("CriticAgentBroker", () => {
   it("leases a bounded job and resolves only a matching submission", async () => {
     const broker = new CriticAgentBroker(30_000);
@@ -111,5 +148,30 @@ describe("CriticAgentBroker", () => {
 
     broker.submit(pending.jobId, claim!.leaseToken, []);
     await pending.result;
+  });
+
+  it("leases and validates a reconciliation result independently", async () => {
+    const broker = new CriticAgentBroker(30_000);
+    const pending = broker.enqueueReconciliation(
+      reconcileInput,
+      new AbortController().signal,
+    );
+    const claim = broker.claimReconciliation();
+
+    expect(claim).toMatchObject({ jobId: pending.jobId, job: reconcileInput });
+    expect(() =>
+      broker.submitReconciliation(pending.jobId, claim!.leaseToken, {
+        outcome: "closed",
+      }),
+    ).toThrow();
+    broker.submitReconciliation(pending.jobId, claim!.leaseToken, {
+      outcome: "resolved",
+      reason: "The revised claim separates compatibility from quality.",
+      confidence: 0.95,
+    });
+    await expect(pending.result).resolves.toMatchObject({
+      outcome: "resolved",
+      confidence: 0.95,
+    });
   });
 });
