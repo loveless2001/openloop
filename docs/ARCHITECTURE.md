@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the implemented Phase 0–4 slice plus the current Markdown/file workflow.
+This document describes the implemented Phase 0–5 slice plus the current Markdown/file workflow.
 
 The browser owns the TipTap editor, stable node IDs, changed-node tracking, dirty state, and
 autosave scheduling. It sends canonical TipTap JSON, derived text, a base version, and an
@@ -18,7 +18,7 @@ interaction events; it contains no provider credentials or provider-specific pro
 Before starting a model request, the completion controller checks a browser-local personal
 dictionary. Partial names, terms, and phrases append their unmatched suffix; exact shortcuts replace
 the shortcut on acceptance. Explicit rejection suppresses that dictionary candidate for the current
-context and allows the normal Qwen debounce and request path to proceed.
+context and allows the normal model debounce and request path to proceed.
 
 The browser separately accumulates meaningful changed blocks and newly added word counts for
 critique. Configurable idle, paragraph-end, heading-created, word-threshold, and manual triggers
@@ -40,8 +40,8 @@ the current server version and never overwrites the local draft.
 SQLite lives under `data/` by default. Drizzle defines the complete baseline database schema from
 the specification so later vertical slices can add behavior without replacing persistence. Phase
 3 uses `documents`, `model_runs`, `issues`, and append-only `issue_events`. Issue conversations add
-one thread per issue plus ordered `issue_chat_messages`; preference weights remain unused until
-Phase 5.
+one thread per issue plus ordered `issue_chat_messages`; Phase 5 updates local-user preference
+weights from explicit actions and sustained non-response.
 
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
 mock implementation, and Ollama/OpenAI-compatible implementation.
@@ -49,8 +49,9 @@ mock implementation, and Ollama/OpenAI-compatible implementation.
 The server selects separate completion and critic adapters at startup.
 `/v1/completions/stream` hashes request context, persists model-run metadata, and emits
 provider-neutral SSE `delta`, `done`, or `error` events. By default, autocomplete calls Ollama's
-native streaming API with `qwen2.5:0.5b`, a fixed 2K context, and a configurable keep-alive; the
-critic remains deterministic mock. A
+native `/api/generate` stream with the SmolLM3-3B-Base Q4_K_M artifact, a literal raw prefix,
+greedy decoding, a fixed 2K context, and a configurable keep-alive. It does not apply a chat
+template or instruction wrapper. The critic remains deterministic mock. A
 smart OpenAI or compatible critic can be enabled independently without moving autocomplete or its
 keystroke context off-machine. The dedicated Ollama adapter owns low-latency completion and model
 residency, while the compatible critic adapter owns request formatting, timeouts, JSON-schema
@@ -111,7 +112,7 @@ does not contain a trainer or deployment actuator; its plan manifests explicitly
 
 For a local Ollama endpoint, server readiness includes the model runtime. Startup reuses an
 existing Ollama server or launches `ollama serve`, verifies that the configured completion model is
-installed, and completes a no-output warm-up before Fastify begins listening. The server records
+installed, and completes a one-token raw-generation warm-up before Fastify begins listening. The server records
 process ownership and stops Ollama on shutdown only when it launched that process. Model downloads
 remain the explicit responsibility of `pnpm setup:ollama`.
 
@@ -127,9 +128,15 @@ mutates document JSON on the model's behalf.
 
 Document saves perform Phase 4 anchor maintenance in the same SQLite transaction as the versioned
 content update. Only issues attached to changed, removed, or merged node IDs are inspected. Pure core
-logic tries exact offsets, fuzzy same-node recovery, the reported merge survivor, and at most two
-neighboring blocks in the original heading before marking an anchor detached. Remaps append
-`anchor_remapped`; the save response reports issue IDs that need semantic reconciliation.
+logic first transforms stored offsets through the old-to-new edit, verifies the exact quote, and
+uses exact quote plus left/right context to disambiguate repeats. It then permits bounded fuzzy
+recovery in the stable node, the reported merge survivor, and at most two surviving neighbors in the
+original heading. Ambiguous matches fail closed: the anchor becomes explicitly detached and the
+issue becomes `needs_review`. Remaps append `anchor_remapped`; the save response reports issue IDs
+that need semantic reconciliation. The provenance-first behavior is adapted from Gerrit's
+[ported comments](https://gerrit-review.googlesource.com/Documentation/user-porting-comments.html),
+with W3C [text-quote context](https://www.w3.org/TR/annotation-model/#text-quote-selector) as the
+prose-specific fallback.
 
 A per-document reconciliation queue debounces for two seconds, merges repeated requests, and runs at
 most five issues sequentially per batch. Each model call uses the configured smart critic adapter,
@@ -137,3 +144,19 @@ records hashed-input model metadata, and rechecks the document version before ap
 Persistence of the new issue state and its `reconciled_*` event is transactional. Severity-five
 issues require at least 0.7 confidence before reconciliation may resolve or invalidate them. SSE
 publishes the resulting update while model failure leaves editing available and the issue reviewable.
+
+Phase 5 detects claim reuse and section boundaries after a saved edit, while duplicate critic
+candidates may trigger severity escalation. The browser waits for 1.2 seconds of idle time and
+suppresses automatic resurfacing while a completion or issue is visible. The server then applies
+the authoritative deterministic gates and ranking in `@openloop/core`, including same-version,
+global, issue cooldown, snooze, automatic-show cap, and preference checks. A selected issue is
+updated in place, labeled **Still open**, and receives another append-only `show` event. Manual
+review uses the same scheduler but may bypass interruption cooldowns. Thirty seconds of continued
+editing elsewhere after an automatic show records `silent_ignore`; preference weights remain
+bounded between `0.5` and `1.5` and never make the decision by themselves.
+
+`@openloop/automerge-spike` is an isolated architecture experiment, not production persistence. It
+tests relative cursor anchors, explicit unanchoring after deletion, history, critic forks, whole
+branch merging, and selective suggestion acceptance. Its passing results justify a later migration
+trial, but TipTap JSON and SQLite remain canonical until full-schema conversion, recovery, and
+concurrent selective-acceptance gates pass.

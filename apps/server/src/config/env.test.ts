@@ -7,7 +7,9 @@ describe("model environment", () => {
     const environment = readEnvironment({});
 
     expect(environment.COMPLETION_PROVIDER).toBe("ollama");
-    expect(environment.COMPLETION_MODEL).toBe("qwen2.5:0.5b");
+    expect(environment.COMPLETION_MODEL).toBe(
+      "hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M",
+    );
     expect(environment.COMPLETION_KEEP_ALIVE).toBe("30m");
     expect(environment.CRITIC_PROVIDER).toBe("mock");
     expect(environment.CRITIC_AGENT).toBe("codex");

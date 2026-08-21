@@ -73,4 +73,23 @@ describe("issue domain", () => {
       transitionIssue(dismissed, { action: "reopen" }, new Date()).issue.status,
     ).toBe("open");
   });
+
+  it("records silent ignore without closing the issue", () => {
+    const result = transitionIssue(
+      issue,
+      { action: "silent_ignore" },
+      new Date("2026-08-18T01:00:00.000Z"),
+    ).issue;
+    expect(result).toMatchObject({ status: "open", silentIgnoreCount: 1 });
+  });
+
+  it("rejects silent ignore after the issue is no longer open", () => {
+    expect(() =>
+      transitionIssue(
+        { ...issue, status: "snoozed" },
+        { action: "silent_ignore" },
+        new Date("2026-08-18T01:00:00.000Z"),
+      ),
+    ).toThrow(InvalidIssueTransitionError);
+  });
 });

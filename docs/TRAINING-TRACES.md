@@ -37,12 +37,13 @@ Implicit dismissal, stale, and error outcomes should not be treated as strong ne
 ## Offline compiler
 
 The `@openloop/training` package validates every trace, joins interaction records, assigns whole
-documents to deterministic train/validation/test splits, and writes independent CPT/FIM,
-continuation-SFT, and paired-preference datasets with a content-hashed manifest. Generated datasets
-remain under ignored local storage.
+documents to deterministic train/validation/test splits, and writes independent CPT,
+continuation-SFT, and paired-preference datasets with a content-hashed manifest. The compiler can
+produce FIM examples for an explicitly configured experiment, but the deployed SmolLM3 causal
+contract sets `fimRate` to zero. Generated datasets remain under ignored local storage.
 
 ```bash
-pnpm training:compile -- --config training/configs/personal-qwen.example.json
+pnpm training:compile -- --config training/configs/personal-smollm3.example.json
 ```
 
 The example expects opted-in traces at `data/training/completion-traces.jsonl` and explicitly
@@ -58,4 +59,4 @@ live model after individual events because acceptance is noisy and context-depen
 The current live collector does not yet capture what the writer types after rejecting a suggestion,
 so ordinary app use cannot yet construct strong chosen-versus-rejected pairs. See
 [the autocomplete adaptation pipeline](AUTOCOMPLETE-TRAINING-PIPELINE.md) for the trace-v2 contract,
-CPT/FIM, continuation SFT, preference-tuning gates, and Ollama deployment sequence.
+causal CPT, continuation SFT, preference-tuning gates, and Ollama deployment sequence.

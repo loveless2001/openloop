@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import {
   COMPLETION_PROMPT_VERSION,
   ModelAdapterError,
+  OLLAMA_CAUSAL_PROMPT_VERSION,
 } from "@openloop/model-adapters";
 import {
   CompletionInteractionRequestSchema,
@@ -31,6 +32,12 @@ export function registerCompletionRoutes(
   selectedModel: SelectedModelAdapters,
   trainingTraceWriter: TrainingTraceWriter,
 ): void {
+  const promptVersion =
+    selectedModel.completion.adapter.providerId === "ollama"
+      ? OLLAMA_CAUSAL_PROMPT_VERSION
+      : COMPLETION_PROMPT_VERSION;
+  const maxOutputTokens =
+    selectedModel.completion.adapter.providerId === "ollama" ? 12 : 60;
   server.post("/v1/completions/stream", async (request, reply) => {
     const input = CompletionStreamRequestSchema.parse(request.body);
     if (sha256(input.prefix) !== input.prefixHash) {
@@ -77,7 +84,7 @@ export function registerCompletionRoutes(
           requestId: input.requestId,
           provider: selectedModel.completion.adapter.providerId,
           model: selectedModel.completion.model,
-          promptVersion: COMPLETION_PROMPT_VERSION,
+          promptVersion,
           inputHash,
         },
       },
@@ -93,7 +100,7 @@ export function registerCompletionRoutes(
             headingPath: input.headingPath,
             prefix: input.prefix,
             suffix: input.suffix,
-            maxOutputTokens: 60,
+            maxOutputTokens,
           },
           controller.signal,
         )) {
@@ -113,7 +120,7 @@ export function registerCompletionRoutes(
           {
             modelRun: {
               requestId: input.requestId,
-              promptVersion: COMPLETION_PROMPT_VERSION,
+              promptVersion,
               latencyMs,
               status: "completed",
             },
@@ -153,7 +160,7 @@ export function registerCompletionRoutes(
             provider: selectedModel.completion.adapter.providerId,
             model: selectedModel.completion.model,
             modelArtifact: selectedModel.completion.model,
-            promptVersion: COMPLETION_PROMPT_VERSION,
+            promptVersion,
             documentId: input.documentId,
             documentVersion: input.documentVersion,
             nodeId: input.nodeId,
@@ -164,8 +171,11 @@ export function registerCompletionRoutes(
             suggestion: generatedSuggestion,
             status: traceStatus,
             decoding: {
-              maxOutputTokens: 60,
-              temperature: 0.2,
+              maxOutputTokens,
+              temperature:
+                selectedModel.completion.adapter.providerId === "ollama"
+                  ? 0
+                  : 0.2,
               ...(selectedModel.completion.adapter.providerId === "ollama"
                 ? { contextTokens: 2_048 }
                 : {}),

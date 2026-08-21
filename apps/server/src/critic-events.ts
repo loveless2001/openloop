@@ -2,6 +2,7 @@ import type {
   IssueChatMessage,
   IssueChatThread,
   IssueRecord,
+  ResurfaceTriggerName,
 } from "@openloop/shared";
 
 export type CriticEvent =
@@ -12,7 +13,12 @@ export type CriticEvent =
         | "issue_eligible"
         | "issue_resolved"
         | "issue_invalidated";
-      data: { issue: IssueRecord; jobId: string };
+      data: {
+        issue: IssueRecord;
+        jobId: string;
+        automatic?: boolean;
+        trigger?: ResurfaceTriggerName;
+      };
     }
   | {
       event: "critic_error";

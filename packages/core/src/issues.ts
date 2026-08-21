@@ -47,6 +47,7 @@ export type IssueDomainEvent =
   | { action: "dismiss" }
   | { action: "reopen" }
   | { action: "resolve" }
+  | { action: "silent_ignore" }
   | { action: "snooze"; snoozedUntil: Date };
 
 export interface IssueTransitionResult {
@@ -108,6 +109,22 @@ export function transitionIssue(
       );
     }
     return { issue: { ...issue, updatedAt }, action: event.action };
+  }
+
+  if (event.action === "silent_ignore") {
+    if (issue.status !== "open") {
+      throw new InvalidIssueTransitionError(
+        "Only an open issue can be silently ignored.",
+      );
+    }
+    return {
+      issue: {
+        ...issue,
+        silentIgnoreCount: issue.silentIgnoreCount + 1,
+        updatedAt,
+      },
+      action: event.action,
+    };
   }
 
   if (event.action === "reopen") {

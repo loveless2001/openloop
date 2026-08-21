@@ -111,7 +111,9 @@ async function stopOwnedServer(child) {
 await loadLocalEnvironment();
 
 const provider = process.env.COMPLETION_PROVIDER ?? "ollama";
-const model = process.env.COMPLETION_MODEL ?? "qwen2.5:0.5b";
+const model =
+  process.env.COMPLETION_MODEL ??
+  "hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M";
 const baseUrl = nativeBaseUrl(
   process.env.COMPLETION_BASE_URL ?? "http://127.0.0.1:11434/v1",
 );

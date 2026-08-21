@@ -1,23 +1,28 @@
 # OpenLoop
 
-OpenLoop is a local-first, stateful LLM co-writer harness. This repository currently implements
-Phases 0–4 from `openloop-cowriter-harness-spec.md`: workspace and persistence, editor
-persistence, inline completion, the critic issue ledger, and anchor reconciliation. The current iteration also adds a
-Markdown-first file workflow and small-model local autocomplete through Ollama.
+**Patchwork tracks what changed; OpenLoop tracks what you still owe the document.**
 
-The current vertical slice provides a TipTap editor with persistent paragraph, heading, and
+OpenLoop is a local-first co-writer built around durable editorial obligations. A critic's
+objection becomes a stateful issue: anchored to the draft, reconciled after edits, and resurfaced
+as the same open loop when the writer relies on the unresolved claim again. Model output is
+replaceable; the document, issue history, and decision about when an objection may interrupt belong
+to the harness.
+
+This repository currently implements the editor, local persistence, inline completion, critic
+issue ledger, anchor reconciliation, and deterministic resurfacing from Phases 0–5 of
+`openloop-cowriter-harness-spec.md`. The formal unresolved-issue export review remains Phase 6 work.
+
+The implemented vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
 versions; local SQLite persistence; streamed ghost-text completion; queued changed-block critique;
 anchored gutter markers; persistent issue actions and history; and visible dirty, saving, conflict,
-and error states. Markdown files can be opened and downloaded from the File menu. Resurfacing and
-the formal unresolved-issue export review belong to later phases and are intentionally not
-implemented.
+and error states. Markdown files can be opened and downloaded from the File menu.
 
 ## Requirements
 
 - Node.js 20 or newer
 - pnpm 10
-- Ollama with `qwen2.5:0.5b` for the default local autocomplete path
+- Ollama with the configured SmolLM3-3B-Base Q4_K_M artifact for the default local autocomplete path
 - macOS or Linux, tmux, and an authenticated Codex or Claude CLI when using
   `CRITIC_PROVIDER=cli-agent` (Windows users can run this optional mode inside WSL)
 
@@ -39,9 +44,11 @@ pnpm dev
 Open <http://127.0.0.1:5173>. The web application proxies `/v1` requests to the API at
 <http://127.0.0.1:8787>. `GET /v1/health` returns `{"status":"ok"}`.
 
-The default configuration uses the 398 MB `qwen2.5:0.5b` model through Ollama for autocomplete and
-the deterministic mock for criticism, so document text does not leave the machine. Local state is
-stored in `data/openloop.db`, which is excluded from Git. The browser remembers the current
+The default configuration uses the 1.9 GB
+[`SmolLM3-3B-Base`](https://huggingface.co/HuggingFaceTB/SmolLM3-3B-Base) Q4_K_M
+[GGUF](https://huggingface.co/mradermacher/SmolLM3-3B-Base-GGUF) through Ollama for autocomplete
+and the deterministic mock for criticism, so document text does not leave the machine. Local state
+is stored in `data/openloop.db`, which is excluded from Git. The browser remembers the current
 document ID in local storage, reloads it on startup, and creates a blank document when no saved
 document exists.
 
@@ -75,16 +82,19 @@ than silently becoming ordinary text.
 The browser-local personal dictionary runs before the model. Add plain names, terms, or frequent
 phrases in **Settings**, one per line, to complete them from a partial suffix. Add abbreviation
 expansions as `shortcut => replacement`; accepting replaces the shortcut. Rejecting a dictionary
-suggestion falls through to Qwen for the same editor context.
+suggestion falls through to the configured completion model for the same editor context.
 
 Completion and criticism have separate provider settings. The default `.env.example` routes only
 completion to `http://127.0.0.1:11434/v1` with `COMPLETION_PROVIDER=ollama` and
-`COMPLETION_MODEL=qwen2.5:0.5b`. Use `COMPLETION_PROVIDER=mock` if you want the deterministic test
-completion instead. The header reports the active autocomplete model.
+`COMPLETION_MODEL=hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M`. Use
+`COMPLETION_PROVIDER=mock` if you want the deterministic test completion instead. The header
+reports the active autocomplete model.
 
-The server warms the model without generating text, then uses Ollama's native streaming API with a
-fixed 2K context for every suggestion. `COMPLETION_KEEP_ALIVE=30m` keeps the model resident between
-typing bursts and can be increased on a dedicated workstation. See
+The server performs a one-token warm-up, then sends the literal trailing document prefix to
+Ollama's native `/api/generate` stream with `raw: true`, greedy decoding, and a fixed 2K context.
+There is no chat template, instruction wrapper, blank marker, or prefix-echo filter in this path.
+`COMPLETION_KEEP_ALIVE=30m` keeps the model resident between typing bursts and can be increased on
+a dedicated workstation. See
 [the local benchmark](docs/OLLAMA-BENCHMARK.md) for cold-start, steady-state, and end-to-end
 measurements.
 
@@ -138,7 +148,7 @@ Set `CAPTURE_TRAINING_TRACES=true` to capture raw completion context, generated 
 accept/reject outcomes as append-only local JSONL. Capture is off by default and the trace path is
 under ignored `data/` storage. See [docs/TRAINING-TRACES.md](docs/TRAINING-TRACES.md) for the schema,
 privacy boundary, and [the staged training plan](docs/AUTOCOMPLETE-TRAINING-PIPELINE.md) for the
-recommended offline Qwen adaptation workflow.
+recommended offline SmolLM3 adaptation workflow.
 
 ## Offline training architecture
 
@@ -148,16 +158,16 @@ run training, convert checkpoints, register Ollama models, or alter the app's co
 
 ```bash
 # Compile opted-in traces and an explicitly approved local corpus.
-pnpm training:compile -- --config training/configs/personal-qwen.example.json
+pnpm training:compile -- --config training/configs/personal-smollm3.example.json
 
 # Write a reviewable CPT plan. The manifest always has executionEnabled: false.
-pnpm training:plan -- --config training/configs/personal-qwen.example.json \
+pnpm training:plan -- --config training/configs/personal-smollm3.example.json \
   --stage cpt \
-  --dataset-manifest data/training/compiled/personal-qwen-v1/manifest.json \
+  --dataset-manifest data/training/compiled/personal-smollm3-v1/manifest.json \
   --output data/training/plans/cpt.json
 
 # Evaluate recorded candidate metrics against a frozen baseline.
-pnpm training:gate -- --config training/configs/personal-qwen.example.json \
+pnpm training:gate -- --config training/configs/personal-smollm3.example.json \
   --baseline data/training/eval/baseline.json \
   --candidate data/training/eval/candidate.json \
   --output data/training/eval/gate-report.json
@@ -205,6 +215,19 @@ Claude CLI critic classifies the existing issue as persisting, resolved, invalid
 the original issue ID and append-only history are retained. Detached or uncertain issues remain in
 the Open filter as **needs review** and never close silently.
 
+When later prose reuses a claim, the writer leaves a section, or a duplicate objection becomes more
+urgent, the deterministic scheduler can bring back the same issue as **Still open**. It preserves
+the original ID and history, enforces same-version and cooldown limits, caps automatic shows, and
+ranks eligible obligations without asking a model whether to interrupt. **Review open loops** uses
+the same path on demand. Explicit actions and sustained non-response adjust bounded local
+preference weights without silently resolving an issue.
+
+Anchor recovery is provenance-first: offsets are transformed through the block edit before exact
+quote-plus-context and bounded fuzzy recovery. Ambiguous matches become explicitly detached rather
+than attaching to the first repeated phrase. The semantics are adapted from Gerrit's
+[ported comments](https://gerrit-review.googlesource.com/Documentation/user-porting-comments.html)
+and the W3C [TextQuoteSelector](https://www.w3.org/TR/annotation-model/#text-quote-selector).
+
 ## Verification
 
 ```bash
@@ -212,15 +235,18 @@ pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm build
 ```
 
 The focused tests cover shared request schemas, document persistence, stable node IDs,
 changed-node accumulation, model adapter validation and cancellation, completion SSE, ghost-text
 acceptance/dismissal/staleness, issue state transitions, critic filtering/deduplication, persistent
-actions/history, MCP bearer and lease enforcement, CLI job routing, stale-result rejection, and
-gutter rendering. Two Playwright tests cover focused selection critique and persisted issue chat.
-The specification's full defer, resurface, resolve, and export browser scenario remains Phase 5–6
-work.
+actions/history, anchor ambiguity and remapping, deterministic resurfacing and cooldown gates,
+preference updates, Automerge cursor/branch behavior, MCP bearer and lease enforcement, CLI job
+routing, stale-result rejection, and gutter rendering. Three Playwright tests cover focused
+selection critique, persisted issue chat, and defer-to-claim-reuse resurfacing with the same issue
+ID. The formal unresolved-issue export review and the resolution/export tail of the full browser
+scenario remain Phase 6 work.
 
 ## Workspace
 
@@ -228,6 +254,7 @@ work.
 apps/web                 React, Vite, and TipTap client
 apps/server              Fastify API, SQLite, Drizzle schema, and migrations
 packages/core            Provider-independent document behavior
+packages/automerge-spike Isolated substrate evaluation; not production persistence
 packages/model-adapters  Provider-neutral model interface and implementations
 packages/shared          Zod network/process schemas and shared types
 docs                     Architecture and implementation decisions

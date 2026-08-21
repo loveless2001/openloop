@@ -232,7 +232,7 @@ export function SettingsDialog({
               onChange={(checked) => update("dictionaryEnabled", checked)}
             >
               Suggest personal names, terms, phrases, and expansions before
-              calling Qwen
+              calling the model
             </ToggleSetting>
             <label className="dictionary-setting">
               <span>One entry per line</span>

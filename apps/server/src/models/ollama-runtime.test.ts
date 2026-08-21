@@ -23,11 +23,11 @@ describe("OllamaRuntime", () => {
       const url = String(input);
       return url.endsWith("/api/version")
         ? Response.json({ version: "test" })
-        : Response.json({ models: [{ name: "qwen2.5:0.5b" }] });
+        : Response.json({ models: [{ name: "smollm3-base-q4" }] });
     });
     const runtime = new OllamaRuntime({
       baseUrl: "http://127.0.0.1:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       fetchImplementation,
       startProcess,
     });
@@ -49,11 +49,11 @@ describe("OllamaRuntime", () => {
         if (versionProbes === 1) throw new Error("connection refused");
         return Response.json({ version: "test" });
       }
-      return Response.json({ models: [{ model: "qwen2.5:0.5b" }] });
+      return Response.json({ models: [{ model: "smollm3-base-q4" }] });
     });
     const runtime = new OllamaRuntime({
       baseUrl: "http://localhost:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       fetchImplementation,
       startProcess,
       pollIntervalMs: 0,
@@ -74,7 +74,7 @@ describe("OllamaRuntime", () => {
     );
     const runtime = new OllamaRuntime({
       baseUrl: "http://127.0.0.1:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       fetchImplementation,
     });
 
@@ -85,7 +85,7 @@ describe("OllamaRuntime", () => {
     const startProcess = vi.fn(() => new FakeOllamaProcess());
     const runtime = new OllamaRuntime({
       baseUrl: "http://models.example.test:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       fetchImplementation: vi.fn<typeof fetch>(async () => {
         throw new Error("connection refused");
       }),

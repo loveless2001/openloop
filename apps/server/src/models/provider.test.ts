@@ -8,7 +8,9 @@ describe("model role selection", () => {
     const selected = selectModelAdapters(readEnvironment({}));
 
     expect(selected.completion.adapter.providerId).toBe("ollama");
-    expect(selected.completion.model).toBe("qwen2.5:0.5b");
+    expect(selected.completion.model).toBe(
+      "hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M",
+    );
     expect(selected.critic.adapter.providerId).toBe("mock");
     expect(selected.critic.model).toBe("mock-smart-v1");
   });

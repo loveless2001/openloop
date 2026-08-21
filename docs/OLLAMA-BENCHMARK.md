@@ -1,59 +1,65 @@
 # Ollama autocomplete benchmark
 
-Measured on 2026-08-19 with Ollama 0.18.3, an NVIDIA GeForce RTX 3060 Laptop GPU
-(6 GB), and an AMD Ryzen 7 5800H. The model was `qwen2.5:0.5b` (Q4_K_M, about
-398 MB on disk).
+Measured on 2026-08-22 with Ollama 0.18.3 and an NVIDIA GeForce RTX 3060 Laptop
+GPU with 6 GB VRAM. The selected model is the 1.9 GB Q4_K_M community GGUF of
+[`HuggingFaceTB/SmolLM3-3B-Base`](https://huggingface.co/HuggingFaceTB/SmolLM3-3B-Base),
+served from
+[`mradermacher/SmolLM3-3B-Base-GGUF`](https://huggingface.co/mradermacher/SmolLM3-3B-Base-GGUF).
 
-## App configuration
+## Deployed request contract
 
-- Native Ollama `/api/generate` warm-up and `/api/chat` streaming
-- 2,048-token context for both warm-up and inference
-- 32 generated tokens for the direct benchmark
-- Temperature 0.2
-- `keep_alive: 30m` on warm-up and every inference request
+- Native Ollama `/api/generate` for warm-up and streaming
+- `raw: true` with the literal trailing document prefix
+- No system prompt, chat template, synthetic blank, or prefix-echo filter
+- 2,048-token context and a 12-token application limit
+- Greedy decoding (`temperature: 0`) with a double-newline stop
+- One generated warm-up token and `keep_alive: 30m`
+
+The causal model ignores suffix metadata. This matches the editor eligibility rule: automatic
+completion is requested only at the end of a text block.
 
 ## Results
 
-An initial cold runner start took about 25 seconds. Reconfiguring an already loaded model to the
-app's 2K context took 6.952 seconds. Five subsequent native streaming calls measured:
+The first timing pass used five realistic short prose prefixes twice, for ten requests. Median time
+to first visible text was 175 ms and median total generation time was 291 ms. Nine immediately
+repeated hot requests settled at 153–181 ms to first text, with a 157 ms median; their median total
+time was 279 ms. The first request after a short gap took 506 ms.
 
-| Run | First response byte |  Total |
-| --- | ------------------: | -----: |
-| 1   |              193 ms | 459 ms |
-| 2   |              114 ms | 500 ms |
-| 3   |              120 ms | 428 ms |
-| 4   |              113 ms | 476 ms |
-| 5   |              130 ms | 427 ms |
+After integration, a live request through `OllamaModelAdapter` following its one-token warm-up
+returned ` it is needed. It should be able to provide help when` in 343 ms, with first text at
+231 ms. Two requests through the full Fastify and SSE path returned the same 12-token continuation
+with first text at 297–305 ms and total time of 482–586 ms. These verify the deployed contract but
+are smoke measurements, not a latency distribution.
 
-Median time to first response byte was 120 ms; median total time was 459 ms. After the run,
-`ollama ps` reported 730 MB allocated, 100% GPU execution, a 2,048-token context, and 29 minutes of
-residency remaining.
+One request in the initial pass stalled during prompt evaluation and took 6.3 seconds to first
+text. The stall did not recur in ten focused repetitions. A smaller Qwen base checkpoint had shown
+a similar isolated multi-second stall, so the serving/runtime path remains the leading suspect, but
+this is an inference rather than a confirmed cause. Production telemetry should retain p95/p99
+latency rather than reporting only warm medians.
 
-The complete OpenLoop HTTP/SSE path, including prompt evaluation and the stream's prefix-echo
-filter, produced the insertable suggestion ` the system is optimized for performance and
-efficiency` in 714 ms, with the first visible SSE delta at 385 ms.
+Three held-out README prefixes completed as:
 
-## Compatibility-endpoint comparison
+| Prefix ending                 | Continuation                                                               | First text |
+| ----------------------------- | -------------------------------------------------------------------------- | ---------: |
+| `an objection may interrupt`  | ` the flow of writing.`                                                    |     210 ms |
+| `export review remains`       | ` to be implemented.`                                                      |     169 ms |
+| `the editor should pause for` | ` a moment before firing off the completion. This is especially important` |     178 ms |
 
-Ollama's OpenAI-compatible endpoint used a 4K context for this model. Switching from a native 2K
-warm-up to that path forced a 21.1-second reload. Once warm, it delivered 115-135 ms first-byte
-latency and 228-414 ms total latency, but its requests reset residency to Ollama's shorter default.
-The app therefore uses the native API, where context and keep-alive are explicit and identical
-between warm-up and inference.
+The model still guesses generic prose rather than repository facts. It also hallucinated a
+“Patchwork database” on one short prompt. Suggestions therefore remain provisional ghost text that
+the writer must accept; they are not a source of project truth.
+
+## Model comparison
+
+The previous `Qwen3-1.7B-Base` Q4 benchmark reached 153 ms median first text and 237 ms median total
+time in its stable pass. SmolLM3 is modestly slower but produced cleaner general-language
+continuations and avoided Qwen's stray classification and multilingual artifacts. The older
+`qwen2.5:0.5b` instruct-via-chat path is not a valid comparison for trace collection because its
+prompt format differed from the deployed causal contract.
 
 ## Verdict
 
-Ollama is suitable for this development autocomplete path on the measured GPU. Its warm steady
-state is responsive enough for inline suggestions, its native API keeps the model resident, and it
-provides a simple cross-platform model lifecycle. Cold start is not interactive, so the server
-warms in the background and the editor suppresses completion requests until readiness is reported.
-
-The main remaining limitation is model quality, not serving latency. The 0.5B model is fast and
-occasionally simplistic. A useful next benchmark is an A/B test against a 1.5B model and a
-fill-in-the-middle-tuned base model using real accepted/rejected completion traces.
-
-Direct `llama-server` (version 7100 is installed on this machine) is the strongest serving
-alternative when explicit fill-in-the-middle templates, speculative decoding, or tighter process
-control matter more than Ollama's lifecycle convenience. Browser WebGPU inference is another
-privacy-preserving option, but shifts model download, memory pressure, and runtime variability to
-every client.
+SmolLM3-3B-Base Q4_K_M is the default development autocomplete model. Its hot latency is adequate
+for an integrated trial, and its prose quality is better than the tested smaller base model. It is
+not production-certified until the full OpenLoop path has enough traces to measure acceptance,
+p95/p99 latency, repeated-prefix rate, and unwanted paragraph breaks.

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { EditorChangeBatch } from "@openloop/shared";
 
 import { loadModelStatus } from "./api.js";
 import { CriticAgentControl } from "./CriticAgentControl.js";
@@ -21,6 +22,9 @@ export function App() {
   const appSettings = useAppSettings();
   const session = useDocumentSession(appSettings.settings);
   const editorRef = useRef<OpenLoopEditorHandle>(null);
+  const resurfaceTimerRef = useRef<number | undefined>(undefined);
+  const resurfaceGenerationRef = useRef(0);
+  const lastEditorActivityAtRef = useRef(Date.now());
   const [modelLabel, setModelLabel] = useState("Checking model…");
   const [modelStatus, setModelStatus] = useState<Awaited<
     ReturnType<typeof loadModelStatus>
@@ -37,14 +41,80 @@ export function App() {
   const ledger = useIssueLedger({
     documentId: session.document?.id,
     documentVersion: session.version,
+    isCompletionVisible: () =>
+      Boolean(editorRef.current?.hasVisibleCompletion()),
     onStatus: session.reportTransientStatus,
   });
+  const selectedIssueIdRef = useRef(ledger.selectedIssueId);
+  selectedIssueIdRef.current = ledger.selectedIssueId;
   const chat = useIssueChat({
     documentId: session.document?.id,
     documentVersion: session.version,
     issueId: ledger.selectedIssueId,
     onStatus: session.reportTransientStatus,
   });
+
+  const queueEditorChange = useCallback(
+    (
+      content: Parameters<typeof session.queueEditorChange>[0],
+      plainText: string,
+      batch: EditorChangeBatch,
+    ) => {
+      const generation = (resurfaceGenerationRef.current += 1);
+      lastEditorActivityAtRef.current = Date.now();
+      session.queueEditorChange(content, plainText, batch);
+      ledger.noteMeaningfulEdit(batch.changedBlocks);
+      if (resurfaceTimerRef.current !== undefined) {
+        window.clearTimeout(resurfaceTimerRef.current);
+      }
+      const sectionEnded = batch.changedBlocks.some(
+        (block) =>
+          (block.nodeType === "heading" && block.previousText === undefined) ||
+          (!block.text.trim() && block.previousNodeText === ""),
+      );
+      resurfaceTimerRef.current = window.setTimeout(() => {
+        resurfaceTimerRef.current = undefined;
+        if (
+          generation !== resurfaceGenerationRef.current ||
+          selectedIssueIdRef.current ||
+          editorRef.current?.hasVisibleCompletion()
+        ) {
+          return;
+        }
+        void session.saveNow().then((savedVersion) => {
+          if (
+            generation !== resurfaceGenerationRef.current ||
+            selectedIssueIdRef.current ||
+            editorRef.current?.hasVisibleCompletion()
+          ) {
+            return;
+          }
+          return ledger.resurface(
+            sectionEnded ? "section_end" : "claim_reused",
+            batch.changedBlocks,
+            savedVersion,
+            {
+              userIdleMs: Date.now() - lastEditorActivityAtRef.current,
+              completionVisible: Boolean(
+                editorRef.current?.hasVisibleCompletion(),
+              ),
+              issueCardExpanded: Boolean(selectedIssueIdRef.current),
+            },
+          );
+        });
+      }, 1_200);
+    },
+    [ledger, session],
+  );
+
+  useEffect(
+    () => () => {
+      if (resurfaceTimerRef.current !== undefined) {
+        window.clearTimeout(resurfaceTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -222,7 +292,9 @@ export function App() {
             onDownload={downloadMarkdown}
             onNew={newDocument}
             onOpen={openMarkdown}
-            onSave={session.saveNow}
+            onSave={async () => {
+              await session.saveNow();
+            }}
           />
         </div>
         <input
@@ -280,10 +352,11 @@ export function App() {
               key={`${session.document.id}:${session.document.updatedAt}`}
               onCompletionStatus={session.reportTransientStatus}
               onCompositionChange={session.setCriticComposing}
+              onCursorBlockChange={ledger.noteCursorMove}
               onCriticTrigger={session.requestCritic}
               onCritiqueSelection={requestSelectionCritique}
               onAddSelectionToChat={addSelectionToChat}
-              onChange={session.queueEditorChange}
+              onChange={queueEditorChange}
               onSelectIssue={(issueId) => {
                 const issue = ledger.issues.find(
                   (entry) => entry.id === issueId,
@@ -299,6 +372,7 @@ export function App() {
         </section>
         <IssuePanel
           issues={ledger.issues}
+          onManualReview={() => void ledger.resurface("manual_review")}
           onSelect={(issue) => {
             ledger.selectIssue(issue?.id);
             if (issue) editorRef.current?.focusIssue(issue);
@@ -335,7 +409,8 @@ export function App() {
               if (
                 result &&
                 (result.issue.status === "resolved" ||
-                  result.issue.status === "dismissed")
+                  result.issue.status === "dismissed" ||
+                  result.issue.status === "snoozed")
               ) {
                 ledger.selectIssue(undefined);
               }

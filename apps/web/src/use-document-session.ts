@@ -333,6 +333,7 @@ export function useDocumentSession(appSettings: AppSettings) {
     }
     await flushRef.current();
     reportTransientStatus("Saved locally", 1_500);
+    return versionRef.current;
   }, [reportTransientStatus]);
 
   return {

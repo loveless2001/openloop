@@ -15,6 +15,7 @@ function label(value: string): string {
 
 export function IssuePanel(props: {
   issues: IssueRecord[];
+  onManualReview: () => void;
   onSelect: (issue?: IssueRecord) => void;
   selectedIssue?: IssueRecord;
 }) {
@@ -39,7 +40,11 @@ export function IssuePanel(props: {
             aria-selected={filter === value}
             className={filter === value ? "active" : undefined}
             key={value}
-            onClick={() => setFilter(value)}
+            onClick={() => {
+              const openedOpenFilter = value === "open" && filter !== "open";
+              setFilter(value);
+              if (openedOpenFilter) props.onManualReview();
+            }}
             role="tab"
             type="button"
           >
@@ -47,6 +52,15 @@ export function IssuePanel(props: {
           </button>
         ))}
       </div>
+      {filter === "open" && filtered.length > 0 ? (
+        <button
+          className="review-open-loops"
+          onClick={props.onManualReview}
+          type="button"
+        >
+          Review open loops
+        </button>
+      ) : null}
 
       {filtered.length === 0 ? (
         <div className="empty-ledger">
@@ -70,6 +84,7 @@ export function IssuePanel(props: {
                 <strong>{issue.question.split("\n")[0]}</strong>
                 <small>“{issue.anchor.quote}”</small>
                 <span className="issue-list-meta">
+                  {issue.shownCount > 1 ? "Still open · " : ""}
                   {label(issue.status)} · shown {issue.shownCount} ·{" "}
                   {new Date(issue.updatedAt).toLocaleTimeString()}
                 </span>

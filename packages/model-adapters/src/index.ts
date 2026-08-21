@@ -1,6 +1,7 @@
 export { ModelAdapterError, type ModelErrorCode } from "./model-error.js";
 export { MockModelAdapter } from "./mock-adapter.js";
 export {
+  OLLAMA_CAUSAL_PROMPT_VERSION,
   OllamaModelAdapter,
   type OllamaModelAdapterConfig,
 } from "./ollama-adapter.js";

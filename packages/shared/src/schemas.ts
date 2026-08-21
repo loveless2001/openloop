@@ -165,6 +165,8 @@ export const ResurfaceTrigger = z.enum([
   "manual_review",
 ]);
 
+export type ResurfaceTriggerName = z.infer<typeof ResurfaceTrigger>;
+
 export const IssueCandidateSchema = z.object({
   type: IssueType,
   anchorQuote: z.string().min(3).max(400),
@@ -236,10 +238,24 @@ export const IssueEventRecordSchema = z.object({
 
 export type IssueEventRecord = z.infer<typeof IssueEventRecordSchema>;
 
+export const PreferenceWeightRecordSchema = z.object({
+  userId: z.literal("local-user"),
+  issueType: IssueType,
+  weight: z.number().min(0.5).max(1.5),
+  explicitDismissals: z.number().int().nonnegative(),
+  applies: z.number().int().nonnegative(),
+  silentIgnores: z.number().int().nonnegative(),
+  updatedAt: z.iso.datetime(),
+});
+
+export type PreferenceWeightRecord = z.infer<
+  typeof PreferenceWeightRecordSchema
+>;
+
 export const DocumentBundleSchema = z.object({
   document: DocumentRecordSchema,
   issues: z.array(IssueRecordSchema),
-  preferences: z.array(z.never()),
+  preferences: z.array(PreferenceWeightRecordSchema),
 });
 
 export const CriticTriggerSchema = z.enum([
@@ -397,6 +413,10 @@ export const IssueActionRequestSchema = z.discriminatedUnion("action", [
     documentVersion: z.number().int().nonnegative(),
   }),
   z.object({
+    action: z.literal("silent_ignore"),
+    documentVersion: z.number().int().nonnegative(),
+  }),
+  z.object({
     action: z.literal("apply_rewrite"),
     documentVersion: z.number().int().nonnegative(),
     expectedAnchorQuote: z.string().min(3).max(400),
@@ -437,6 +457,24 @@ export type ReconcileRequest = z.infer<typeof ReconcileRequestSchema>;
 export const ReconcileJobResponseSchema = z.object({
   jobId: z.uuid(),
   status: z.literal("queued"),
+});
+
+export const ResurfaceRequestSchema = z.object({
+  documentVersion: z.number().int().nonnegative(),
+  trigger: ResurfaceTrigger,
+  changedBlocks: z.array(TextBlockSnapshotSchema).max(250).default([]),
+  candidateIssueId: z.uuid().optional(),
+  attention: z.object({
+    userIdleMs: z.number().int().nonnegative(),
+    completionVisible: z.boolean(),
+    issueCardExpanded: z.boolean(),
+  }),
+});
+
+export type ResurfaceRequest = z.infer<typeof ResurfaceRequestSchema>;
+
+export const ResurfaceResponseSchema = z.object({
+  issue: IssueRecordSchema.optional(),
 });
 
 export const CompletionStreamRequestSchema = z.object({

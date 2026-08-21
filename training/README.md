@@ -31,7 +31,7 @@ data/training/corpus/*.md
 Then run:
 
 ```bash
-pnpm training:compile -- --config training/configs/personal-qwen.example.json
+pnpm training:compile -- --config training/configs/personal-smollm3.example.json
 ```
 
 The compiler writes `cpt.jsonl`, `continuation-sft.jsonl`, `preferences.jsonl`, and `manifest.json`
@@ -41,9 +41,9 @@ number. Interaction outcomes such as dismissal, staleness, and errors never beco
 ## Plan without executing
 
 ```bash
-pnpm training:plan -- --config training/configs/personal-qwen.example.json \
+pnpm training:plan -- --config training/configs/personal-smollm3.example.json \
   --stage sft \
-  --dataset-manifest data/training/compiled/personal-qwen-v1/manifest.json \
+  --dataset-manifest data/training/compiled/personal-smollm3-v1/manifest.json \
   --output data/training/plans/sft.json
 ```
 
@@ -60,7 +60,7 @@ Baseline and candidate metric files must follow `AutocompleteMetricsSchema` in
 manifest hash; a mismatch fails the gate.
 
 ```bash
-pnpm training:gate -- --config training/configs/personal-qwen.example.json \
+pnpm training:gate -- --config training/configs/personal-smollm3.example.json \
   --baseline data/training/eval/baseline.json \
   --candidate data/training/eval/candidate.json \
   --output data/training/eval/gate-report.json

@@ -9,8 +9,9 @@ phrases, and shortcut expansion. Model training targets longer contextual contin
 The non-executing foundation is implemented in `@openloop/training`:
 
 - versioned Zod contracts for trace v2, compiled datasets, pipeline configuration, and metrics;
-- deterministic candidate/feedback joins, document-grouped splits, exact deduplication, causal/FIM
-  corpus examples, continuation targets, and true rejection/replacement preference pairs;
+- deterministic candidate/feedback joins, document-grouped splits, exact deduplication, causal
+  corpus examples, optional experimental FIM transforms, continuation targets, and true
+  rejection/replacement preference pairs;
 - content-hashed dataset manifests, reviewable stage-plan manifests, and deployment gate reports;
 - CLI entry points for compilation, planning, and gate evaluation; and
 - server emission of v2 model-candidate and interaction-feedback records behind the existing local
@@ -27,22 +28,22 @@ See [`training/README.md`](../training/README.md) for the implemented commands a
 
 Use three stages, each admitted only when the preceding stage beats the frozen base-model baseline:
 
-1. **Continued pretraining with FIM augmentation (optional)** learns the distribution of the
-   writer's raw prose: vocabulary, register, sentence rhythm, and recurring structure. Start from
-   the unquantized Qwen base checkpoint. Mix ordinary left-to-right examples with
-   fill-in-the-middle examples because OpenLoop supplies both prefix and suffix context. Continued
-   domain/task pretraining and FIM are supported by the approaches in
-   [Don't Stop Pretraining](https://aclanthology.org/2020.acl-main.740/) and
-   [Efficient Training of Language Models to Fill in the Middle](https://arxiv.org/abs/2207.14255/).
-2. **Continuation SFT** teaches the deployed task contract: given the same bounded prefix, suffix,
-   title, heading path, and instruction used by OpenLoop, emit only a short continuation. Accepted
-   suggestions and actual user-written continuations are positive targets.
+1. **Continued causal pretraining (optional)** learns the distribution of the writer's raw prose:
+   vocabulary, register, sentence rhythm, and recurring structure. Start from the unquantized
+   `HuggingFaceTB/SmolLM3-3B-Base` checkpoint and use ordinary left-to-right examples. Continued
+   domain/task pretraining follows the approach in
+   [Don't Stop Pretraining](https://aclanthology.org/2020.acl-main.740/). The compiler retains an
+   experimental FIM transform, but the deployed general-language model does not use it and the
+   example configuration sets `fimRate` to zero.
+2. **Continuation SFT** teaches the deployed task contract: given the same bounded raw prefix used
+   by OpenLoop, emit only a short continuation. Do not add a chat template or instruction wrapper.
+   Accepted suggestions and actual user-written continuations are positive targets.
 3. **Preference tuning (optional)** teaches selection among plausible continuations. Use DPO only
    for true paired examples containing both a chosen continuation and a rejected suggestion.
    Unary accepted/rejected observations may support a separately evaluated KTO pilot, but they are
    not equivalent to preference pairs and should not be called offline RL.
 
-Do not train the quantized model served by Ollama. Train a base or instruction checkpoint with
+Do not train the quantized model served by Ollama. Train the base checkpoint with
 LoRA/QLoRA, merge only an accepted adapter, then convert and quantize a deployment artifact.
 
 ## Phase A — strengthen local trace capture
@@ -54,7 +55,7 @@ Upgrade the opt-in trace format to schema version 2 before collecting training d
 - After an explicit model-suggestion rejection, capture the next user-authored span as
   `replacementText`, stopping at 128 characters, a paragraph boundary, document switch, or a
   configurable timeout.
-- After no suggestion was accepted, sample natural prefix/suffix/next-span examples from saved
+- After no suggestion was accepted, sample natural prefix/next-span examples from saved
   user-authored text. Keep these separate from interaction feedback.
 - Preserve the current distinction between explicit rejection, implicit dismissal, staleness, and
   errors. Only explicit rejection is a negative label.
@@ -81,7 +82,8 @@ near-duplicate passages cannot cross train and evaluation sets.
 
 Produce three independent datasets:
 
-- `cpt.jsonl`: clean user-authored passages with left-to-right and FIM transformations.
+- `cpt.jsonl`: clean user-authored passages with left-to-right transformations for the current
+  configuration.
 - `continuation-sft.jsonl`: production-shaped context and target continuation pairs.
 - `preferences.jsonl`: `context`, `chosen`, and `rejected` triples with provenance and label type.
 
@@ -91,7 +93,7 @@ frozen evaluation set that is never used for checkpoint selection or preference 
 
 ## Phase C — establish the baseline
 
-Evaluate the exact currently deployed Qwen artifact and prompt before training. Record:
+Evaluate the exact deployed SmolLM3 GGUF and raw-prefix contract before training. Record:
 
 - continuation negative log-likelihood where available;
 - normalized character-prefix match and accepted-character simulation;
@@ -108,19 +110,19 @@ checkpoint can ship without comparison to this frozen baseline.
 Run the smallest informative matrix:
 
 1. Base model plus continuation SFT LoRA.
-2. Base model plus CPT/FIM LoRA, then continuation SFT.
+2. Base model plus causal CPT LoRA, then continuation SFT.
 3. Best supervised checkpoint plus DPO, only when clean pairs exist.
 4. Optional KTO pilot for unary feedback, evaluated separately from DPO.
 
 Use low learning rates, short pilots, checkpointed validation, and a mixture of generic prose or the
-original instruction data where licensing permits to limit catastrophic forgetting. Treat CPT as
-optional: retain it only if `CPT/FIM -> SFT` beats SFT alone on the frozen continuation evaluation.
+original pretraining data where licensing permits to limit catastrophic forgetting. Treat CPT as
+optional: retain it only if `CPT -> SFT` beats SFT alone on the frozen continuation evaluation.
 Do not infer benefit from training loss alone.
 
 Preference optimization follows
 [Direct Preference Optimization](https://arxiv.org/abs/2305.18290/). A KTO experiment follows
 [KTO](https://arxiv.org/abs/2402.01306/) but is higher-risk here because its published experiments
-do not establish behavior for this 0.5B deployment.
+do not establish behavior for this local 3B deployment.
 
 ## Phase E — deployment gate
 
@@ -133,8 +135,8 @@ An adapted artifact may replace the current model only when it:
 - preserves the current Ollama boot, warm-up, streaming, cancellation, and keep-alive contract.
 
 Merge the winning adapter, convert it to GGUF, quantize candidate variants, register an explicit
-Ollama model name, and rerun the existing cold/warm benchmark. Keep the old model selectable for a
-local A/B period and record the served artifact digest in every new trace.
+Ollama model name, and rerun the existing cold/warm benchmark. Record the served artifact digest in
+every new trace and retain the frozen base metrics for comparison.
 
 ## Artifact layout
 

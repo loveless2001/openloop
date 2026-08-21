@@ -784,7 +784,7 @@ export interface ModelAdapter {
 
 ## 9.2 Providers
 
-Implement two adapters.
+Implement three adapters.
 
 ### `MockModelAdapter`
 
@@ -795,6 +795,18 @@ Behavior must be deterministic from the input text:
 - Completion: append a fixed context-sensitive phrase.
 - Critic: if changed text contains a configured trigger phrase such as `any model will work equally well`, return a known ambiguity issue.
 - Reconcile: mark resolved if the updated block contains both `API-compatible` and `quality`; mark invalidated if anchor text is absent and no semantically related keywords remain; otherwise persist.
+
+### `OllamaModelAdapter`
+
+Use this completion-only adapter for the default local prose base model. Send the literal final
+1,500 prefix characters to Ollama `/api/generate` with `raw: true`; do not add a chat template,
+instruction wrapper, synthetic blank, or prefix-echo filter. Use a 2,048-token context, greedy
+decoding, a 12-token hard limit, a double-newline stop, and configurable keep-alive. Warm the exact
+serving contract by generating one token before reporting the provider ready.
+
+The automatic editor trigger occurs only at the end of a text block, so this causal path does not
+consume suffix context. Mid-block completion requires a separately evaluated suffix-aware model
+contract.
 
 ### `OpenAICompatibleAdapter`
 
@@ -823,10 +835,11 @@ Requirements:
 
 ## 9.3 Provider selection
 
-Environment variable:
+Provider selection is explicit per role:
 
 ```text
-MODEL_PROVIDER=mock | openai-compatible
+COMPLETION_PROVIDER=mock | ollama | openai | openai-compatible
+CRITIC_PROVIDER=mock | openai | openai-compatible | cli-agent
 ```
 
 The rest of the application must depend only on `ModelAdapter`.
@@ -839,6 +852,7 @@ Prompts live in versioned files under:
 
 ```text
 packages/model-adapters/src/prompts/
+  causal-prefix.v1.ts
   completion.v1.ts
   critic.v1.ts
   reconcile.v1.ts
@@ -847,9 +861,10 @@ packages/model-adapters/src/prompts/
 
 Include `promptVersion` in model-run metadata.
 
-## 10.1 Completion system prompt
+## 10.1 Completion contracts
 
-Use this behavior, with minor formatting changes allowed:
+The native Ollama causal path uses `causal-prefix.v1`: the literal bounded prefix and no instruction
+text. OpenAI-compatible chat completion uses this behavior, with minor formatting changes allowed:
 
 ```text
 You are an inline writing completion engine.
@@ -859,7 +874,7 @@ Prefer one short clause or sentence. Stop before changing topic.
 Do not add Markdown unless the surrounding text already uses it.
 ```
 
-Completion context builder:
+Chat-compatible completion context builder:
 
 - up to 1,500 characters before cursor;
 - up to 300 characters after cursor;
@@ -1057,21 +1072,42 @@ This is the main harness feature.
 
 When changed blocks arrive, inspect issues anchored to affected or removed node IDs.
 
-Apply in order:
+The remapper adapts Gerrit's ported-comment model rather than treating quote search as the source of
+truth. Gerrit computes mappings between the source and target revisions, transforms a comment range
+through those edits, and degrades a range comment to a broader file-level location when no exact
+position survives. See Gerrit's
+[porting behavior](https://gerrit-review.googlesource.com/Documentation/user-porting-comments.html),
+[`CommentPorter`](https://gerrit.googlesource.com/gerrit/+/refs/heads/master/java/com/google/gerrit/server/restapi/change/CommentPorter.java),
+and
+[`GitPositionTransformer`](https://gerrit.googlesource.com/gerrit/+/refs/heads/master/java/com/google/gerrit/server/patch/GitPositionTransformer.java).
 
-1. **Exact same node and exact quote exists**  
-   Update quote offsets. Keep status.
+OpenLoop's block-text adaptation applies in order:
 
-2. **Same node, quote changed slightly**  
-   Search candidate substrings using normalized token similarity and surrounding context. If best score >= 0.82, remap and append `anchor_remapped`.
+1. **Transform the stored range through the edit**
+   Map `quoteStart` and `quoteEnd` through the old-to-new block edit. Accept the mapped range only
+   when it does not intersect changed text and still contains the exact stored quote.
 
-3. **Merged node map contains old node ID**  
-   Search surviving node using quote and context. Remap if score >= 0.78.
+2. **Recover the exact quote with context**
+   In the same stable node, match the stored exact quote and use stored left/right context to
+   disambiguate repeated occurrences. This follows the W3C
+   [`TextQuoteSelector`](https://www.w3.org/TR/annotation-model/#text-quote-selector) shape of
+   `exact`, `prefix`, and `suffix`. If two occurrences remain plausible, fail closed.
 
-4. **Neighbor search**  
-   Search previous and next two text blocks in the same heading path. Remap if score >= 0.86.
+3. **Bounded fuzzy recovery**
+   If the quote itself changed slightly, search small candidate windows in the same node using
+   normalized token similarity and surrounding context. If the best score is at least `0.82` and
+   meaningfully exceeds the runner-up, remap and append `anchor_remapped`.
 
-5. Otherwise set `anchor.detached = true` and status to `needs_review`, then enqueue model reconciliation.
+4. **Mapped merge survivor, then stable neighbors**
+   Search an explicit merge survivor at threshold `0.78`, then the previous and next two surviving
+   stable-node neighbors in the same heading path at threshold `0.86`. Both searches require an
+   unambiguous best result.
+
+5. **Explicit orphaned state**
+   If no bounded mapping is trustworthy, set `anchor.detached = true` and status to `needs_review`,
+   retain the stored excerpt, and enqueue model reconciliation. This is OpenLoop's explicit
+   orphaned/unanchored equivalent of Gerrit's broader-location fallback; it must never silently pick
+   the first textual match.
 
 Suggested similarity score:
 
@@ -1555,12 +1591,17 @@ WEB_PORT=5173
 SERVER_PORT=8787
 DATABASE_URL=file:./data/openloop.db
 
-MODEL_PROVIDER=mock
-MODEL_BASE_URL=http://localhost:11434/v1
-MODEL_API_KEY=
-MODEL_FAST=fast-model-id
-MODEL_SMART=smart-model-id
-MODEL_SUPPORTS_JSON_SCHEMA=false
+COMPLETION_PROVIDER=ollama
+COMPLETION_BASE_URL=http://127.0.0.1:11434/v1
+COMPLETION_API_KEY=
+COMPLETION_MODEL=hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M
+COMPLETION_KEEP_ALIVE=30m
+
+CRITIC_PROVIDER=mock
+CRITIC_BASE_URL=http://127.0.0.1:11434/v1
+CRITIC_API_KEY=
+CRITIC_MODEL=smart-model-id
+CRITIC_SUPPORTS_JSON_SCHEMA=false
 
 COMPLETION_DEBOUNCE_MS=300
 CRITIC_IDLE_MS=1800
@@ -1938,4 +1979,3 @@ The work is done when:
 - all acceptance criteria and required tests pass;
 - `README.md`, `ARCHITECTURE.md`, and `DECISIONS.md` accurately describe the implementation;
 - there are no placeholder TODOs in the critical path.
-

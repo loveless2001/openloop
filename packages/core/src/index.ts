@@ -18,3 +18,16 @@ export type {
   AnchorRemapResult,
   ReconciliationTransitionResult,
 } from "./reconciliation.js";
+export {
+  GLOBAL_INTERRUPTION_COOLDOWN_MS,
+  ISSUE_BASE_COOLDOWN_MS,
+  MAX_AUTOMATIC_SHOWS_PER_ISSUE,
+  rankResurfaceIssues,
+  selectResurfaceIssue,
+  SILENT_IGNORE_EXTRA_COOLDOWN_MS,
+} from "./resurfacing.js";
+export type {
+  RankedResurfaceIssue,
+  ResurfaceSelectionInput,
+  ResurfaceTrigger,
+} from "./resurfacing.js";

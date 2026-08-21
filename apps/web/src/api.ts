@@ -11,6 +11,7 @@ import {
   IssueListResponseSchema,
   ModelStatusResponseSchema,
   ReconcileJobResponseSchema,
+  ResurfaceResponseSchema,
   SaveDocumentResponseSchema,
   type CriticJobRequest,
   type CriticAgentStatusResponse,
@@ -22,6 +23,7 @@ import {
   type JsonValue,
   type ModelStatusResponse,
   type ReconcileRequest,
+  type ResurfaceRequest,
 } from "@openloop/shared";
 
 export class ApiClientError extends Error {
@@ -71,6 +73,18 @@ export async function submitReconciliation(
     body: JSON.stringify(input),
   });
   return ReconcileJobResponseSchema.parse(await parseResponse(response)).jobId;
+}
+
+export async function requestResurfacing(
+  documentId: string,
+  input: ResurfaceRequest,
+) {
+  const response = await fetch(`/v1/documents/${documentId}/resurface`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return ResurfaceResponseSchema.parse(await parseResponse(response));
 }
 
 export async function loadIssues(

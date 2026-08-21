@@ -79,11 +79,12 @@ that Markdown does not represent. Import assigns fresh stable IDs; download seri
 content and deliberately omits IDs and issue metadata. This preserves the issue lifecycle while
 providing a normal Markdown workflow.
 
-## 013 — Give autocomplete a dedicated lightweight production model
+## 013 — Give autocomplete a dedicated local production model
 
 Autocomplete and criticism select independent adapters. The default completion provider is local
-Ollama with the installed `qwen2.5:0.5b` model; its 398 MB footprint is appropriate for frequent,
-short, latency-sensitive suggestions. The default critic remains deterministic mock. An optional
+Ollama with a Q4_K_M quantization of `SmolLM3-3B-Base`. A standalone comparison found its prose
+continuations cleaner than the smaller Qwen baseline while retaining roughly 160–200 ms hot
+time-to-first-text on the target GPU. The default critic remains deterministic mock. An optional
 OpenAI or compatible smart critic can therefore inspect changed blocks without becoming a hard
 dependency for autocomplete. Configuration uses explicit `COMPLETION_*` and `CRITIC_*` variables;
 there is no shared or legacy provider path.
@@ -117,10 +118,10 @@ configuration.
 
 Names, terminology, recurring phrases, and shortcut expansions are deterministic user preferences,
 not model knowledge. They live with browser-local app settings and are matched synchronously before
-Qwen is called. Plain entries append only the unmatched suffix; `shortcut => replacement` entries
-replace the exact shortcut only after acceptance. Rejecting the dictionary result suppresses it for
-that unchanged context and falls through to Qwen. This keeps lexical completions immediate and
-private while reserving the model for contextual clause and sentence generation.
+the completion model is called. Plain entries append only the unmatched suffix; `shortcut => replacement`
+entries replace the exact shortcut only after acceptance. Rejecting the dictionary result suppresses
+it for that unchanged context and falls through to the model. This keeps lexical completions immediate
+and private while reserving the model for contextual clause and sentence generation.
 
 ## 018 — Keep autocomplete adaptation offline and non-executing by default
 
@@ -192,3 +193,60 @@ five sequential smart-model calls and stale model results are discarded and requ
 newest version. Reconciliation state and its append-only event commit together, and low-confidence
 severity-five closure becomes uncertain. Codex and Claude receive the same operation through three
 additional leased MCP tools, preserving the server's sole authority over issue state.
+
+## 024 — Port Gerrit's provenance-first comment mapping and fail closed
+
+OpenLoop now maps a stored range through the old-to-new block edit before attempting quote search.
+The design is adapted from Gerrit's
+[ported-comment behavior](https://gerrit-review.googlesource.com/Documentation/user-porting-comments.html),
+[`CommentPorter`](https://gerrit.googlesource.com/gerrit/+/refs/heads/master/java/com/google/gerrit/server/restapi/change/CommentPorter.java),
+and
+[`GitPositionTransformer`](https://gerrit.googlesource.com/gerrit/+/refs/heads/master/java/com/google/gerrit/server/patch/GitPositionTransformer.java): revision provenance and edit mappings come first, and an unmappable precise range degrades explicitly instead of acquiring a guessed new position.
+
+Because prose blocks are not source files, exact-quote recovery additionally follows the W3C
+[`TextQuoteSelector`](https://www.w3.org/TR/annotation-model/#text-quote-selector) shape: stored
+exact text plus left and right context. Duplicate exact matches and close fuzzy runner-ups fail
+closed. OpenLoop represents Gerrit's broader-location fallback as `anchor.detached = true` plus
+`needs_review`, retaining the excerpt as an explicit orphaned anchor. Stable-node, merge-survivor,
+and bounded-neighbor searches remain recovery scopes, not permission to scan the whole draft.
+
+## 025 — Make resurfacing a deterministic ledger operation
+
+Claim reuse, section end, severity escalation, and manual review call one provider-independent
+scheduler. Eligibility, same-version suppression, global and per-issue cooldowns, automatic-show
+caps, snooze handling, preference weights, ranking, and tie breaks are pure core behavior. A show
+updates the original issue ID and appends history transactionally. Continuing to edit elsewhere for
+thirty seconds after an automatic show records `silent_ignore`, adds a weak negative preference
+signal, and extends the next cooldown without resolving the obligation.
+
+## 026 — Keep Automerge as an evaluated substrate, not a parallel source of truth
+
+The isolated `@openloop/automerge-spike` demonstrates that Automerge 3.2.6 cursors survive edits
+before an anchor and a block split, deleted selected text can be exposed as explicitly unanchored,
+critic forks retain history, whole branches merge, and a single critic suggestion can be accepted
+without merging unrelated branch edits. These results support Automerge as a plausible future
+canonical document substrate. See Automerge's
+[`getCursor` contract](https://automerge.org/automerge/api-docs/js/functions/getCursor.html),
+[history and merge model](https://automerge.org/docs/reference/under-the-hood/merge-rules/), and
+[ProseMirror integration guide](https://automerge.org/docs/cookbook/rich-text-prosemirror-react/).
+
+Production migration is deferred. The spike intentionally does not prove lossless conversion of
+OpenLoop's full TipTap schema and stable block IDs, SQLite migration and crash recovery, or safe
+selective acceptance under concurrent writer edits. The ProseMirror binding is still
+[beta](https://github.com/automerge/automerge-prosemirror#status) and the deeper
+[Refs API is experimental](https://automerge.org/docs/reference/repositories/refs/). Until those
+gates pass, TipTap JSON and versioned SQLite remain the single canonical source; Automerge is not
+introduced beside them as a second authority.
+
+## 027 — Use raw causal completion for the local base model
+
+The local autocomplete adapter sends the literal final 1,500 characters before the cursor to
+Ollama `/api/generate` with `raw: true`. It uses greedy decoding, a 12-token hard limit, and a
+double-newline stop. There is no system message, “complete this passage” wrapper, synthetic blank,
+or prefix-echo filter. Those mechanisms are chat-model workarounds and would contaminate training
+traces with a request format that the deployed base model does not use.
+
+The editor currently requests completion only at the end of a text block, so the causal model does
+not consume suffix text. This is deliberate: a general prose base model was preferred over a
+code-oriented FIM checkpoint. If mid-block completion becomes a product requirement, it needs a
+separately evaluated suffix-aware model contract rather than an instruction shim.

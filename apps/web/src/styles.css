@@ -553,6 +553,18 @@ textarea {
   box-shadow: 0 1px 4px rgb(51 44 35 / 10%);
 }
 
+.review-open-loops {
+  align-self: start;
+  padding: 7px 11px;
+  border: 1px solid #b9aea0;
+  border-radius: 7px;
+  color: #173c32;
+  background: #fffdf8;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .issue-list {
   display: grid;
   gap: 8px;

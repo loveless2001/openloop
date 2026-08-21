@@ -17,6 +17,7 @@ import {
   IssueActionConflictError,
   issueValues,
 } from "./issues.js";
+import { updatePreferenceWeight } from "./preferences.js";
 
 function actionEvent(input: IssueActionRequest, now: Date): IssueDomainEvent {
   if (input.action === "snooze") {
@@ -86,6 +87,19 @@ export function applyIssueAction(
       payload: operation ? { editorOperation: operation } : {},
       now: now.getTime(),
     });
+    if (
+      input.action === "apply_rewrite" ||
+      input.action === "resolve" ||
+      input.action === "dismiss" ||
+      input.action === "silent_ignore"
+    ) {
+      updatePreferenceWeight(
+        database,
+        transitioned.type,
+        input.action,
+        now.getTime(),
+      );
+    }
   })();
 
   return {

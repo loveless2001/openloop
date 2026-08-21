@@ -282,7 +282,7 @@ describe("inline completion vertical slice", () => {
     editor.destroy();
   });
 
-  it("shows a dictionary result immediately and falls through to Qwen after rejection", async () => {
+  it("shows a dictionary result immediately and falls through to the model after rejection", async () => {
     const fetchImplementation = vi.fn<typeof fetch>(async (input) => {
       if (String(input).endsWith("/completion-events")) {
         return Response.json({ accepted: true }, { status: 202 });

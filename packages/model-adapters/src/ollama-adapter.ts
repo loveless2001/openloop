@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { ModelAdapterError } from "./model-error.js";
 import {
+  buildCausalCompletionPrefix,
+  OLLAMA_CAUSAL_PROMPT_VERSION,
+} from "./prompts/causal-prefix.v1.js";
+import {
   assertSuccessfulResponse,
   mapRequestError,
   requestSignal,
@@ -13,20 +17,11 @@ import type {
 } from "./types.js";
 
 const ollamaChunkSchema = z.object({
-  message: z.object({ content: z.string() }).optional(),
+  response: z.string(),
   done: z.boolean(),
 });
 
-const ollamaCompletionSystemPrompt =
-  "You are an inline autocomplete engine. Return only a short continuation; never repeat the supplied text.";
-
-function buildOllamaCompletionPrompt(input: CompletionInput): string {
-  const prefix = input.prefix.slice(-1_500);
-  if (input.suffix) {
-    return `Complete this passage. Answer with only the text missing at the blank:\n${prefix} ___ ${input.suffix.slice(0, 300)}`;
-  }
-  return `Complete this sentence. Answer with only the missing ending:\n${prefix} ___`;
-}
+export { OLLAMA_CAUSAL_PROMPT_VERSION };
 
 export interface OllamaModelAdapterConfig {
   baseUrl: string;
@@ -59,10 +54,11 @@ export class OllamaModelAdapter implements ModelAdapter {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model: this.config.model,
-          prompt: "",
+          prompt: "Warm",
+          raw: true,
           stream: false,
           keep_alive: this.config.keepAlive,
-          options: { num_ctx: this.contextTokens, num_predict: 0 },
+          options: { num_ctx: this.contextTokens, num_predict: 1 },
         }),
         signal: AbortSignal.timeout(120_000),
       },
@@ -75,26 +71,8 @@ export class OllamaModelAdapter implements ModelAdapter {
     externalSignal: AbortSignal,
   ): AsyncIterable<CompletionChunk> {
     const activeSignal = requestSignal(externalSignal, 8_000);
-    const prefix = input.prefix.slice(-1_500);
-    let undecidedText = "";
-    let echoDecisionMade = false;
+    const prefix = buildCausalCompletionPrefix(input);
     let emittedText = false;
-    const prepareText = (delta: string, final = false): string => {
-      if (echoDecisionMade) return delta;
-      undecidedText += delta;
-      if (prefix.startsWith(undecidedText)) {
-        if (!final) return "";
-        undecidedText = "";
-        echoDecisionMade = true;
-        return "";
-      }
-      const result = undecidedText.startsWith(prefix)
-        ? undecidedText.slice(prefix.length)
-        : undecidedText;
-      undecidedText = "";
-      echoDecisionMade = true;
-      return result;
-    };
     const normalizeFirstDelta = (delta: string): string => {
       if (!delta || emittedText) return delta;
       emittedText = true;
@@ -104,22 +82,20 @@ export class OllamaModelAdapter implements ModelAdapter {
     };
     try {
       const response = await this.fetchImplementation(
-        `${this.baseUrl()}/api/chat`,
+        `${this.baseUrl()}/api/generate`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             model: this.config.model,
-            messages: [
-              { role: "system", content: ollamaCompletionSystemPrompt },
-              { role: "user", content: buildOllamaCompletionPrompt(input) },
-            ],
+            prompt: prefix,
+            raw: true,
             stream: true,
             keep_alive: this.config.keepAlive,
             options: {
               num_ctx: this.contextTokens,
               num_predict: input.maxOutputTokens,
-              temperature: 0.2,
+              temperature: 0,
               stop: ["\n\n"],
             },
           }),
@@ -145,15 +121,11 @@ export class OllamaModelAdapter implements ModelAdapter {
         for (const line of lines) {
           if (!line.trim()) continue;
           const chunk = ollamaChunkSchema.parse(JSON.parse(line));
-          if (chunk.message?.content) {
-            const textDelta = normalizeFirstDelta(
-              prepareText(chunk.message.content),
-            );
+          if (chunk.response) {
+            const textDelta = normalizeFirstDelta(chunk.response);
             if (textDelta) yield { textDelta, done: false };
           }
           if (chunk.done) {
-            const textDelta = normalizeFirstDelta(prepareText("", true));
-            if (textDelta) yield { textDelta, done: false };
             yield { textDelta: "", done: true };
             return;
           }

@@ -32,6 +32,7 @@ export interface PersistedCriticIssue {
   kind: "created" | "updated";
   issue: IssueRecord;
   needsReconciliation: boolean;
+  resurfaceTrigger?: "severity_escalated";
 }
 
 function sha256(value: string): string {
@@ -92,8 +93,16 @@ function updateDuplicate(
   database: Database,
   duplicate: IssueRecord,
   candidate: IssueCandidate,
-): { issue: IssueRecord; needsReconciliation: boolean } | undefined {
+):
+  | {
+      issue: IssueRecord;
+      needsReconciliation: boolean;
+      resurfaceTrigger?: "severity_escalated";
+    }
+  | undefined {
   const severityEscalated = candidate.severity > duplicate.severity;
+  const interruptEscalated =
+    candidate.interruptWorthiness - duplicate.interruptWorthiness >= 0.15;
   const confidence = Math.max(duplicate.confidence, candidate.confidence);
   const wordingChanged =
     normalizeIssueText(candidate.anchorQuote) !==
@@ -101,6 +110,7 @@ function updateDuplicate(
     coreQuestion(candidate.question) !== coreQuestion(duplicate.question);
   if (
     !severityEscalated &&
+    !interruptEscalated &&
     confidence === duplicate.confidence &&
     !wordingChanged
   ) {
@@ -113,14 +123,19 @@ function updateDuplicate(
       candidate.severity,
     ) as IssueRecord["severity"],
     confidence,
-    resurfaceTriggers: severityEscalated
-      ? [
-          ...new Set([
-            ...duplicate.resurfaceTriggers,
-            "severity_escalated" as const,
-          ]),
-        ]
-      : duplicate.resurfaceTriggers,
+    interruptWorthiness: Math.max(
+      duplicate.interruptWorthiness,
+      candidate.interruptWorthiness,
+    ),
+    resurfaceTriggers:
+      severityEscalated || interruptEscalated
+        ? [
+            ...new Set([
+              ...duplicate.resurfaceTriggers,
+              "severity_escalated" as const,
+            ]),
+          ]
+        : duplicate.resurfaceTriggers,
     status:
       severityEscalated && duplicate.status === "resolved"
         ? "open"
@@ -136,7 +151,13 @@ function updateDuplicate(
     .set(issueValues(updated))
     .where(eq(issues.id, updated.id))
     .run();
-  return { issue: updated, needsReconciliation: wordingChanged };
+  return {
+    issue: updated,
+    needsReconciliation: wordingChanged,
+    ...(severityEscalated || interruptEscalated
+      ? { resurfaceTrigger: "severity_escalated" as const }
+      : {}),
+  };
 }
 
 function createIssue(input: {

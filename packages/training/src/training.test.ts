@@ -18,9 +18,9 @@ const config: PipelineConfig = {
   experimentName: "test",
   seed: "fixed-seed",
   baseModel: {
-    huggingFaceId: "Qwen/Qwen2.5-0.5B",
+    huggingFaceId: "HuggingFaceTB/SmolLM3-3B-Base",
     revision: "pinned",
-    deployedOllamaModel: "qwen2.5:0.5b",
+    deployedOllamaModel: "smollm3-base-q4",
   },
   data: {
     tracePaths: [],
@@ -97,9 +97,9 @@ function traceRecords(): TrainingTraceV2[] {
       candidateId: requestId,
       source: "model",
       provider: "ollama",
-      model: "qwen2.5:0.5b",
-      modelArtifact: "qwen2.5:0.5b",
-      promptVersion: "completion.v1",
+      model: "smollm3-base-q4",
+      modelArtifact: "smollm3-base-q4",
+      promptVersion: "causal-prefix.v1",
       documentId,
       documentVersion: 3,
       nodeId,
@@ -111,7 +111,7 @@ function traceRecords(): TrainingTraceV2[] {
       status: "completed",
       decoding: {
         maxOutputTokens: 60,
-        temperature: 0.2,
+        temperature: 0,
         contextTokens: 2048,
       },
     },

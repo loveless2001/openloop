@@ -84,7 +84,7 @@ describe("OllamaModelAdapter", () => {
     );
     const adapter = new OllamaModelAdapter({
       baseUrl: "http://127.0.0.1:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       keepAlive: "30m",
       contextTokens: 2_048,
       fetchImplementation,
@@ -98,22 +98,23 @@ describe("OllamaModelAdapter", () => {
     expect(
       JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
-      model: "qwen2.5:0.5b",
-      prompt: "",
+      model: "smollm3-base-q4",
+      prompt: "Warm",
+      raw: true,
       stream: false,
       keep_alive: "30m",
-      options: { num_ctx: 2_048, num_predict: 0 },
+      options: { num_ctx: 2_048, num_predict: 1 },
     });
   });
 
-  it("streams native Ollama chat chunks and refreshes residency", async () => {
+  it("streams raw causal Ollama chunks and refreshes residency", async () => {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(
           new TextEncoder().encode(
-            '{"message":{"content":" hello"},"done":false}\n' +
-              '{"message":{"content":" world"},"done":false}\n' +
-              '{"message":{"content":""},"done":true}\n',
+            '{"response":" hello","done":false}\n' +
+              '{"response":" world","done":false}\n' +
+              '{"response":"","done":true}\n',
           ),
         );
         controller.close();
@@ -124,7 +125,7 @@ describe("OllamaModelAdapter", () => {
     );
     const adapter = new OllamaModelAdapter({
       baseUrl: "http://127.0.0.1:11434/v1",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       keepAlive: "30m",
       contextTokens: 2_048,
       fetchImplementation,
@@ -132,7 +133,7 @@ describe("OllamaModelAdapter", () => {
     const chunks: string[] = [];
 
     for await (const chunk of adapter.streamCompletion(
-      completionInput,
+      { ...completionInput, suffix: " later text" },
       new AbortController().signal,
     )) {
       chunks.push(chunk.textDelta);
@@ -140,32 +141,33 @@ describe("OllamaModelAdapter", () => {
 
     expect(chunks.join("")).toBe(" hello world");
     expect(fetchImplementation.mock.calls[0]?.[0]).toBe(
-      "http://127.0.0.1:11434/api/chat",
+      "http://127.0.0.1:11434/api/generate",
     );
     expect(
       JSON.parse(String(fetchImplementation.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
+      prompt: "The harness is model agnostic",
+      raw: true,
       stream: true,
       keep_alive: "30m",
       options: {
         num_ctx: 2_048,
         num_predict: 60,
-        temperature: 0.2,
+        temperature: 0,
         stop: ["\n\n"],
       },
     });
   });
 
-  it("removes a repeated prefix before exposing a suggestion", async () => {
+  it("adds a word boundary when a raw first token omits one", async () => {
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(
           new TextEncoder().encode(
-            '{"message":{"content":"The harness"},"done":false}\n' +
-              '{"message":{"content":" is model agnostic"},"done":false}\n' +
-              '{"message":{"content":" because adapters isolate providers."},"done":false}\n' +
-              '{"message":{"content":""},"done":true}\n',
+            '{"response":"because","done":false}\n' +
+              '{"response":" adapters isolate providers.","done":false}\n' +
+              '{"response":"","done":true}\n',
           ),
         );
         controller.close();
@@ -173,7 +175,7 @@ describe("OllamaModelAdapter", () => {
     });
     const adapter = new OllamaModelAdapter({
       baseUrl: "http://127.0.0.1:11434",
-      model: "qwen2.5:0.5b",
+      model: "smollm3-base-q4",
       keepAlive: "30m",
       fetchImplementation: vi.fn<typeof fetch>(async () =>
         Promise.resolve(new Response(stream, { status: 200 })),

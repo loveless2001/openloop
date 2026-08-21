@@ -40,6 +40,11 @@ interface AnchorMatch {
   score: number;
 }
 
+interface RangeMapping {
+  start: number;
+  end: number;
+}
+
 function sameHeading(left: string[], right: string[]): boolean {
   return left.join("\u0000") === right.join("\u0000");
 }
@@ -75,6 +80,120 @@ function surroundingContext(text: string, start: number, end: number) {
   return {
     left: text.slice(Math.max(0, start - 80), start),
     right: text.slice(end, end + 80),
+  };
+}
+
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) index += 1;
+  return index;
+}
+
+function commonSuffixLength(
+  left: string,
+  right: string,
+  prefixLength: number,
+): number {
+  const limit = Math.min(left.length, right.length) - prefixLength;
+  let length = 0;
+  while (
+    length < limit &&
+    left[left.length - length - 1] === right[right.length - length - 1]
+  ) {
+    length += 1;
+  }
+  return length;
+}
+
+/**
+ * Maps a range through one contiguous edit. Ranges intersecting the edit are
+ * deliberately rejected so quote recovery can fail closed instead of
+ * pretending an edited selection still has the same meaning.
+ */
+function mapRangeThroughEdit(
+  previousText: string,
+  currentText: string,
+  start: number,
+  end: number,
+): RangeMapping | undefined {
+  if (start < 0 || end < start || end > previousText.length) return;
+  const prefixLength = commonPrefixLength(previousText, currentText);
+  const suffixLength = commonSuffixLength(
+    previousText,
+    currentText,
+    prefixLength,
+  );
+  const previousChangedEnd = previousText.length - suffixLength;
+  const currentChangedEnd = currentText.length - suffixLength;
+
+  if (end <= prefixLength) return { start, end };
+  if (start >= previousChangedEnd) {
+    const shift = currentChangedEnd - previousChangedEnd;
+    return { start: start + shift, end: end + shift };
+  }
+  return;
+}
+
+function contextSimilarity(left: string, right: string): number {
+  const normalizedLeft = normalizeIssueText(left);
+  const normalizedRight = normalizeIssueText(right);
+  if (!normalizedLeft && !normalizedRight) return 1;
+  if (!normalizedLeft || !normalizedRight) return 0;
+  return normalizedLevenshteinSimilarity(normalizedLeft, normalizedRight);
+}
+
+function exactOccurrences(text: string, quote: string): number[] {
+  const starts: number[] = [];
+  let offset = 0;
+  while (offset <= text.length - quote.length) {
+    const start = text.indexOf(quote, offset);
+    if (start < 0) break;
+    starts.push(start);
+    offset = start + Math.max(1, quote.length);
+  }
+  return starts;
+}
+
+function exactOccurrenceMatch(
+  issue: IssueRecord,
+  block: TextBlockSnapshot,
+): AnchorMatch | undefined {
+  const starts = exactOccurrences(block.text, issue.anchor.quote);
+  if (starts.length === 0) return;
+  if (starts.length === 1) {
+    const start = starts[0]!;
+    return {
+      block,
+      quote: issue.anchor.quote,
+      quoteStart: start,
+      quoteEnd: start + issue.anchor.quote.length,
+      score: 1,
+    };
+  }
+
+  const scored = starts
+    .map((start) => {
+      const end = start + issue.anchor.quote.length;
+      const context = surroundingContext(block.text, start, end);
+      return {
+        start,
+        score:
+          0.5 * contextSimilarity(issue.anchor.leftContext, context.left) +
+          0.5 * contextSimilarity(issue.anchor.rightContext, context.right),
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+  const best = scored[0];
+  const runnerUp = scored[1];
+  if (!best || best.score < 0.7) return;
+  if (runnerUp && best.score - runnerUp.score < 0.15) return;
+  return {
+    block,
+    quote: issue.anchor.quote,
+    quoteStart: best.start,
+    quoteEnd: best.start + issue.anchor.quote.length,
+    score: best.score,
   };
 }
 
@@ -127,7 +246,7 @@ function bestMatch(
     1,
     normalizeIssueText(issue.anchor.quote).split(" ").filter(Boolean).length,
   );
-  let best: AnchorMatch | undefined;
+  const matches: AnchorMatch[] = [];
   for (const block of blocks) {
     for (const candidate of candidateWindows(block.text, targetTokenCount)) {
       const score = scoreCandidate(
@@ -138,17 +257,25 @@ function bestMatch(
         candidate.start,
         candidate.end,
       );
-      if (!best || score > best.score) {
-        best = {
-          block,
-          score,
-          quote: candidate.quote,
-          quoteStart: candidate.start,
-          quoteEnd: candidate.end,
-        };
-      }
+      matches.push({
+        block,
+        score,
+        quote: candidate.quote,
+        quoteStart: candidate.start,
+        quoteEnd: candidate.end,
+      });
     }
   }
+  matches.sort((left, right) => right.score - left.score);
+  const best = matches[0];
+  if (!best) return;
+  const minimumSeparation = Math.max(3, best.quote.length / 2);
+  const runnerUp = matches.find(
+    (candidate) =>
+      candidate.block.nodeId !== best.block.nodeId ||
+      Math.abs(candidate.quoteStart - best.quoteStart) > minimumSeparation,
+  );
+  if (runnerUp && best.score - runnerUp.score < 0.08) return;
   return best;
 }
 
@@ -182,17 +309,34 @@ function issueWithAnchor(
 
 function exactMatch(
   issue: IssueRecord,
+  previousBlock: TextBlockSnapshot | undefined,
   block: TextBlockSnapshot,
 ): AnchorMatch | undefined {
-  const start = block.text.indexOf(issue.anchor.quote);
-  if (start < 0) return;
-  return {
-    block,
-    quote: issue.anchor.quote,
-    quoteStart: start,
-    quoteEnd: start + issue.anchor.quote.length,
-    score: 1,
-  };
+  if (
+    previousBlock &&
+    issue.anchor.quoteStart !== undefined &&
+    issue.anchor.quoteEnd !== undefined
+  ) {
+    const mapped = mapRangeThroughEdit(
+      previousBlock.text,
+      block.text,
+      issue.anchor.quoteStart,
+      issue.anchor.quoteEnd,
+    );
+    if (
+      mapped &&
+      block.text.slice(mapped.start, mapped.end) === issue.anchor.quote
+    ) {
+      return {
+        block,
+        quote: issue.anchor.quote,
+        quoteStart: mapped.start,
+        quoteEnd: mapped.end,
+        score: 1,
+      };
+    }
+  }
+  return exactOccurrenceMatch(issue, block);
 }
 
 export function remapIssueAnchor(input: {
@@ -210,7 +354,9 @@ export function remapIssueAnchor(input: {
   const sameNode = input.currentBlocks.find(
     (block) => block.nodeId === input.issue.anchor.nodeId,
   );
-  const exact = sameNode ? exactMatch(input.issue, sameNode) : undefined;
+  const exact = sameNode
+    ? exactMatch(input.issue, originalBlock, sameNode)
+    : undefined;
   if (exact) {
     const materiallyChanged = originalBlock
       ? normalizedLevenshteinSimilarity(originalBlock.text, sameNode!.text) <
@@ -273,11 +419,22 @@ export function remapIssueAnchor(input: {
   const previousIndex = input.previousBlocks.findIndex(
     (block) => block.nodeId === input.issue.anchor.nodeId,
   );
+  const nearbySurvivorIds =
+    previousIndex < 0
+      ? new Set<string>()
+      : new Set(
+          input.previousBlocks
+            .slice(Math.max(0, previousIndex - 2), previousIndex + 3)
+            .map((block) => block.nodeId),
+        );
+  const survivorIndexes = input.currentBlocks
+    .map((block, index) => (nearbySurvivorIds.has(block.nodeId) ? index : -1))
+    .filter((index) => index >= 0);
   const neighborBlocks = input.currentBlocks.filter(
     (block, index) =>
-      previousIndex >= 0 &&
-      Math.abs(index - previousIndex) <= 2 &&
-      sameHeading(originalHeading, block.headingPath),
+      survivorIndexes.some(
+        (survivorIndex) => Math.abs(index - survivorIndex) <= 2,
+      ) && sameHeading(originalHeading, block.headingPath),
   );
   const neighbor = bestMatch(input.issue, originalHeading, neighborBlocks);
   if (neighbor && neighbor.score >= 0.86) {

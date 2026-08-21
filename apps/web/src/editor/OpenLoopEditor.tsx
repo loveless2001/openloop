@@ -20,10 +20,11 @@ import {
   useState,
 } from "react";
 
-import { buildChangeBatch } from "./change-tracker.js";
+import { buildChangeBatch, textBlockSnapshots } from "./change-tracker.js";
 import {
   COMPLETION_ACCEPTED_SELECTION_META,
   CompletionDecoration,
+  completionDecorationKey,
 } from "./completion-decoration.js";
 import {
   getCriticSelection,
@@ -47,6 +48,7 @@ interface OpenLoopEditorProps {
   selectedIssueId?: string;
   onCompletionStatus: (message?: string, durationMs?: number) => void;
   onCompositionChange: (composing: boolean) => void;
+  onCursorBlockChange: (nodeId: string, orderedNodeIds: string[]) => void;
   onCriticTrigger: (trigger: CriticTrigger) => void;
   onCritiqueSelection: (selection: EditorCriticSelection) => void;
   onAddSelectionToChat: (selection: EditorCriticSelection) => void;
@@ -63,6 +65,7 @@ export interface OpenLoopEditorHandle {
   applyOperation: (operation: EditorOperation, expectedText: string) => boolean;
   focusIssue: (issue: IssueRecord) => boolean;
   getMarkdown: () => string;
+  hasVisibleCompletion: () => boolean;
   parseMarkdown: (markdown: string) => Record<string, JsonValue>;
 }
 
@@ -93,6 +96,7 @@ export const OpenLoopEditor = forwardRef<
     selectedIssueId,
     onCompletionStatus,
     onCompositionChange,
+    onCursorBlockChange,
     onCriticTrigger,
     onCritiqueSelection,
     onAddSelectionToChat,
@@ -113,6 +117,7 @@ export const OpenLoopEditor = forwardRef<
   });
   const onCompletionStatusRef = useRef(onCompletionStatus);
   const onCompositionChangeRef = useRef(onCompositionChange);
+  const onCursorBlockChangeRef = useRef(onCursorBlockChange);
   const onCriticTriggerRef = useRef(onCriticTrigger);
   const onCritiqueSelectionRef = useRef(onCritiqueSelection);
   const onAddSelectionToChatRef = useRef(onAddSelectionToChat);
@@ -138,6 +143,7 @@ export const OpenLoopEditor = forwardRef<
   };
   onCompletionStatusRef.current = onCompletionStatus;
   onCompositionChangeRef.current = onCompositionChange;
+  onCursorBlockChangeRef.current = onCursorBlockChange;
   onCriticTriggerRef.current = onCriticTrigger;
   onCritiqueSelectionRef.current = onCritiqueSelection;
   onAddSelectionToChatRef.current = onAddSelectionToChat;
@@ -237,6 +243,16 @@ export const OpenLoopEditor = forwardRef<
         completionControllerRef.current?.handleTransaction(transaction);
       },
       onSelectionUpdate: ({ editor: updatedEditor, transaction }) => {
+        const cursorNodeId = updatedEditor.state.selection.$from.parent.attrs
+          .nodeId as unknown;
+        if (typeof cursorNodeId === "string") {
+          onCursorBlockChangeRef.current(
+            cursorNodeId,
+            textBlockSnapshots(updatedEditor.state.doc).map(
+              (block) => block.nodeId,
+            ),
+          );
+        }
         const selection = getCriticSelection(
           updatedEditor,
           transaction.getMeta(COMPLETION_ACCEPTED_SELECTION_META)
@@ -353,6 +369,11 @@ export const OpenLoopEditor = forwardRef<
       },
       getMarkdown() {
         return editor?.getMarkdown() ?? "";
+      },
+      hasVisibleCompletion() {
+        return Boolean(
+          editor && completionDecorationKey.getState(editor.state),
+        );
       },
       parseMarkdown(markdown) {
         if (!editor?.markdown) throw new Error("The editor is not ready.");

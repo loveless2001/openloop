@@ -29,7 +29,10 @@ const EnvironmentSchema = z
     COMPLETION_PROVIDER: ProviderSchema.default("ollama"),
     COMPLETION_BASE_URL: z.url().default("http://127.0.0.1:11434/v1"),
     COMPLETION_API_KEY: z.string().default(""),
-    COMPLETION_MODEL: z.string().min(1).default("qwen2.5:0.5b"),
+    COMPLETION_MODEL: z
+      .string()
+      .min(1)
+      .default("hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M"),
     COMPLETION_KEEP_ALIVE: z.string().min(1).default("30m"),
     CRITIC_PROVIDER: CriticProviderSchema.default("mock"),
     CRITIC_BASE_URL: z.url().default("http://127.0.0.1:11434/v1"),

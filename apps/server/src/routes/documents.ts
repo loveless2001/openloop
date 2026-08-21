@@ -1,5 +1,6 @@
 import {
   CreateDocumentRequestSchema,
+  ResurfaceRequestSchema,
   SaveDocumentRequestSchema,
 } from "@openloop/shared";
 import type { FastifyInstance } from "fastify";
@@ -17,6 +18,8 @@ import type { CriticEventBroker } from "../critic-events.js";
 import type { ReconciliationQueue } from "../reconciliation-queue.js";
 import { remapImpactedIssues } from "../reconciliation.js";
 import { IssueNotFoundError, listIssues } from "../issues.js";
+import { listPreferenceWeights } from "../preferences.js";
+import { resurfaceIssue } from "../resurfacing.js";
 
 const DocumentParamsSchema = z.object({ documentId: z.uuid() });
 
@@ -36,8 +39,28 @@ export function registerDocumentRoutes(
     return {
       document: getDocument(database, documentId),
       issues: listIssues(database, documentId),
-      preferences: [],
+      preferences: listPreferenceWeights(database),
     };
+  });
+
+  server.post("/v1/documents/:documentId/resurface", async (request) => {
+    const { documentId } = DocumentParamsSchema.parse(request.params);
+    const input = ResurfaceRequestSchema.parse(request.body);
+    const issue = resurfaceIssue(database, documentId, input);
+    if (issue) {
+      broker.emit(documentId, {
+        event: "issue_eligible",
+        data: {
+          issue,
+          jobId: request.id,
+          automatic:
+            input.trigger !== "manual_review" &&
+            input.trigger !== "before_export",
+          trigger: input.trigger,
+        },
+      });
+    }
+    return issue ? { issue } : {};
   });
 
   server.put("/v1/documents/:documentId", async (request) => {

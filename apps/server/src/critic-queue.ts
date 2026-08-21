@@ -125,12 +125,22 @@ export class CriticQueue {
       for (const result of persisted) {
         this.broker.emit(job.documentId, {
           event: result.kind === "created" ? "issue_created" : "issue_updated",
-          data: { issue: result.issue, jobId: job.id },
+          data: {
+            issue: result.issue,
+            jobId: job.id,
+            ...(result.resurfaceTrigger
+              ? { trigger: result.resurfaceTrigger }
+              : {}),
+          },
         });
         if (result.kind === "created" && result.issue.shownCount > 0) {
           this.broker.emit(job.documentId, {
             event: "issue_eligible",
-            data: { issue: result.issue, jobId: job.id },
+            data: {
+              issue: result.issue,
+              jobId: job.id,
+              automatic: job.request.trigger !== "manual",
+            },
           });
         }
       }

@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "experimentName": "personal-qwen-autocomplete-v1",
+  "experimentName": "personal-smollm3-autocomplete-v1",
   "seed": "openloop-personal-v1",
   "baseModel": {
-    "huggingFaceId": "Qwen/Qwen2.5-0.5B",
+    "huggingFaceId": "HuggingFaceTB/SmolLM3-3B-Base",
     "revision": "pin-before-training",
-    "deployedOllamaModel": "qwen2.5:0.5b"
+    "deployedOllamaModel": "hf.co/mradermacher/SmolLM3-3B-Base-GGUF:Q4_K_M"
   },
   "data": {
     "tracePaths": ["data/training/completion-traces.jsonl"],
     "corpusPaths": ["data/training/corpus"],
-    "outputDirectory": "data/training/compiled/personal-qwen-v1",
+    "outputDirectory": "data/training/compiled/personal-smollm3-v1",
     "split": {
       "train": 0.8,
       "validation": 0.1,
@@ -19,7 +19,7 @@
     "cptChunkCharacters": 4096,
     "continuationPrefixCharacters": 1500,
     "continuationTargetCharacters": 120,
-    "fimRate": 0.5
+    "fimRate": 0
   },
   "stages": {
     "cpt": {
@@ -66,7 +66,7 @@
     }
   },
   "deployment": {
-    "ollamaModelName": "openloop-qwen-personal:v1",
+    "ollamaModelName": "openloop-smollm3-personal:v1",
     "quantizationCandidates": ["Q4_K_M", "Q5_K_M", "Q8_0"]
   },
   "gates": {

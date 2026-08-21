@@ -22,7 +22,7 @@ describe("SettingsDialog", () => {
         createElement(SettingsDialog, {
           modelStatus: {
             provider: "ollama",
-            completionModel: "qwen2.5:0.5b",
+            completionModel: "smollm3-base-q4",
             criticProvider: "openai",
             criticModel: "smart-model",
             mode: "local",

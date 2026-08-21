@@ -76,6 +76,7 @@ export function issueValues(
     status: issue.status,
     severity: issue.severity,
     confidence: issue.confidence,
+    interruptWorthiness: issue.interruptWorthiness,
     resurfaceTriggersJson: JSON.stringify(issue.resurfaceTriggers),
     anchorJson: JSON.stringify(issue.anchor),
     shownCount: issue.shownCount,

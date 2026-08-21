@@ -73,6 +73,62 @@ describe("anchor reconciliation", () => {
     });
   });
 
+  it("maps an exact duplicate by edit provenance instead of choosing the first occurrence", () => {
+    const repeatedText = `First: ${quote}. Second: ${quote}.`;
+    const secondStart = repeatedText.lastIndexOf(quote);
+    const repeatedIssue: IssueRecord = {
+      ...issue,
+      anchor: {
+        ...issue.anchor,
+        quoteStart: secondStart,
+        quoteEnd: secondStart + quote.length,
+        leftContext: repeatedText.slice(
+          Math.max(0, secondStart - 80),
+          secondStart,
+        ),
+        rightContext: repeatedText.slice(secondStart + quote.length),
+      },
+    };
+    const currentText = `New preface. ${repeatedText}`;
+    const result = remapIssueAnchor({
+      issue: repeatedIssue,
+      previousBlocks: [block(nodeA, repeatedText)],
+      currentBlocks: [block(nodeA, currentText)],
+      mergedNodeMap: {},
+      documentVersion: 2,
+      now,
+    });
+
+    expect(result.kind).toBe("exact");
+    expect(result.issue.anchor.quoteStart).toBe(currentText.lastIndexOf(quote));
+  });
+
+  it("fails closed when duplicate exact quotes cannot be disambiguated", () => {
+    const ambiguousIssue: IssueRecord = {
+      ...issue,
+      anchor: {
+        ...issue.anchor,
+        quoteStart: undefined,
+        quoteEnd: undefined,
+        leftContext: "",
+        rightContext: "",
+      },
+    };
+    const result = remapIssueAnchor({
+      issue: ambiguousIssue,
+      previousBlocks: [block(nodeA, quote)],
+      currentBlocks: [block(nodeA, `${quote} ${quote}`)],
+      mergedNodeMap: {},
+      documentVersion: 2,
+      now,
+    });
+
+    expect(result).toMatchObject({
+      kind: "detached",
+      issue: { status: "needs_review", anchor: { detached: true } },
+    });
+  });
+
   it("fuzzily remaps a slightly changed quote in the same node", () => {
     const revisedQuote = "any model can work equally well";
     const result = remapIssueAnchor({
