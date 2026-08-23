@@ -10,6 +10,7 @@ import {
 interface SettingsDialogProps {
   modelStatus: ModelStatusResponse | null;
   onClose: () => void;
+  onRequestDeleteLocalData: () => void;
   onReset: () => void;
   onSave: (settings: AppSettings) => void;
   open: boolean;
@@ -79,6 +80,7 @@ function ToggleSetting({
 export function SettingsDialog({
   modelStatus,
   onClose,
+  onRequestDeleteLocalData,
   onReset,
   onSave,
   open,
@@ -309,6 +311,27 @@ export function SettingsDialog({
                 </dd>
               </div>
             </dl>
+          </section>
+
+          <section className="privacy-settings">
+            <div>
+              <p>Local data</p>
+              <small>
+                Delete saved documents, issue history, chats, model-run
+                metadata, optional training traces, and preferences from this
+                device.
+              </small>
+            </div>
+            <button
+              className="danger-button"
+              onClick={() => {
+                onClose();
+                onRequestDeleteLocalData();
+              }}
+              type="button"
+            >
+              Delete local data…
+            </button>
           </section>
 
           <div className="dialog-actions settings-actions">

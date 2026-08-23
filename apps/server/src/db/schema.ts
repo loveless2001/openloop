@@ -17,6 +17,26 @@ export const documents = sqliteTable("documents", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const documentEvents = sqliteTable(
+  "document_events",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id),
+    action: text("action").notNull(),
+    documentVersion: integer("document_version").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("document_events_document_created_idx").on(
+      table.documentId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const issues = sqliteTable(
   "issues",
   {

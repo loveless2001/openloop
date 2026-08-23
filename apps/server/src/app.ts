@@ -27,6 +27,7 @@ import { registerCriticAgentRoutes } from "./routes/critic-agent.js";
 import { registerCriticRoutes } from "./routes/critic.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { registerIssueChatRoutes } from "./routes/issue-chat.js";
+import { registerLocalDataRoutes } from "./routes/local-data.js";
 import { TrainingTraceWriter } from "./training-traces.js";
 import { registerCriticMcpRoute } from "./critic-mcp.js";
 import { IssueChatAgentBroker } from "./issue-chat-agent-broker.js";
@@ -201,6 +202,7 @@ export function buildServer({
     provider: activeModel.critic.adapter.providerId,
     model: activeModel.critic.model,
   });
+  registerLocalDataRoutes(server, activeDatabase, activeTrainingTraceWriter);
   registerCriticMcpRoute(
     server,
     activeCriticAgentBroker,

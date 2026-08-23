@@ -16,6 +16,7 @@ describe("SettingsDialog", () => {
     document.body.append(container);
     const root = createRoot(container);
     const onSave = vi.fn();
+    const onRequestDeleteLocalData = vi.fn();
 
     await act(async () => {
       root.render(
@@ -29,6 +30,7 @@ describe("SettingsDialog", () => {
             state: "ready",
           },
           onClose: vi.fn(),
+          onRequestDeleteLocalData,
           onReset: vi.fn(),
           onSave,
           open: true,
@@ -83,6 +85,13 @@ describe("SettingsDialog", () => {
       "Managed by the server’s .env file",
     );
     expect(container.textContent).toContain("openai · smart-model");
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("Delete local data"))
+        ?.click();
+    });
+    expect(onRequestDeleteLocalData).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());
     container.remove();

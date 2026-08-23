@@ -32,6 +32,7 @@ function sha256(value: string): string {
 export class ReconciliationQueue {
   private readonly pending = new Map<string, PendingDocument>();
   private readonly runningDocuments = new Set<string>();
+  private readonly idleWaiters = new Map<string, Set<() => void>>();
 
   constructor(
     private readonly database: Database,
@@ -78,6 +79,30 @@ export class ReconciliationQueue {
       if (pending.timer) clearTimeout(pending.timer);
     }
     this.pending.clear();
+    for (const waiters of this.idleWaiters.values()) {
+      for (const resolve of waiters) resolve();
+    }
+    this.idleWaiters.clear();
+  }
+
+  async flush(documentId: string): Promise<void> {
+    while (true) {
+      const pending = this.pending.get(documentId);
+      if (pending?.timer) {
+        clearTimeout(pending.timer);
+        pending.timer = undefined;
+      }
+      if (!this.runningDocuments.has(documentId) && pending) {
+        await this.pump(documentId);
+        continue;
+      }
+      if (!this.runningDocuments.has(documentId)) return;
+      await new Promise<void>((resolve) => {
+        const waiters = this.idleWaiters.get(documentId) ?? new Set();
+        waiters.add(resolve);
+        this.idleWaiters.set(documentId, waiters);
+      });
+    }
   }
 
   private async pump(documentId: string): Promise<void> {
@@ -111,6 +136,11 @@ export class ReconciliationQueue {
           next.timer = undefined;
           void this.pump(documentId);
         }, this.idleMs);
+      }
+      const waiters = this.idleWaiters.get(documentId);
+      if (waiters) {
+        this.idleWaiters.delete(documentId);
+        for (const resolve of waiters) resolve();
       }
     }
   }

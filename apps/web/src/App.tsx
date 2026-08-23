@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorChangeBatch } from "@openloop/shared";
 
-import { loadModelStatus } from "./api.js";
+import {
+  deleteLocalData,
+  downloadDocumentExport,
+  loadModelStatus,
+  reviewDocumentExport,
+} from "./api.js";
 import { CriticAgentControl } from "./CriticAgentControl.js";
 import {
   OpenLoopEditor,
@@ -11,10 +16,15 @@ import type { EditorCriticSelection } from "./editor/critic-selection.js";
 import { IssuePanel } from "./IssuePanel.js";
 import { IssueChatDrawer } from "./IssueChatDrawer.js";
 import { FileMenu, markdownFilename } from "./FileMenu.js";
+import { ExportReviewDialog } from "./ExportReviewDialog.js";
 import { SettingsDialog } from "./SettingsDialog.js";
+import { APP_SETTINGS_STORAGE_KEY } from "./app-settings.js";
 import { selectionRequiresWarning } from "./selection-policy.js";
 import { useAppSettings } from "./use-app-settings.js";
-import { useDocumentSession } from "./use-document-session.js";
+import {
+  DOCUMENT_STORAGE_KEY,
+  useDocumentSession,
+} from "./use-document-session.js";
 import { useIssueLedger } from "./use-issue-ledger.js";
 import { useIssueChat } from "./use-issue-chat.js";
 
@@ -31,6 +41,12 @@ export function App() {
   > | null>(null);
   const [completionReady, setCompletionReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportReview, setExportReview] = useState<Awaited<
+    ReturnType<typeof reviewDocumentExport>
+  > | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
   const [activeSelection, setActiveSelection] =
     useState<EditorCriticSelection | null>(null);
   const [oversizedSelection, setOversizedSelection] = useState<{
@@ -177,19 +193,73 @@ export function App() {
     [session.createFreshDocument, session.reportTransientStatus],
   );
 
-  const downloadMarkdown = useCallback(() => {
-    const markdown = editorRef.current?.getMarkdown();
-    if (markdown === undefined) return;
-    const url = URL.createObjectURL(
-      new Blob([markdown], { type: "text/markdown;charset=utf-8" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = markdownFilename(session.title);
-    link.click();
-    URL.revokeObjectURL(url);
-    session.reportTransientStatus(`Downloaded ${link.download}`, 2_000);
-  }, [session.reportTransientStatus, session.title]);
+  const downloadExport = useCallback(
+    async (force: boolean) => {
+      if (!session.document) return;
+      setExporting(true);
+      const filename = markdownFilename(session.title);
+      try {
+        const markdown = await downloadDocumentExport(
+          session.document.id,
+          force,
+        );
+        const url = URL.createObjectURL(markdown);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+        setExportReview(null);
+        session.reportTransientStatus(`Exported ${filename}`, 2_000);
+      } catch (error) {
+        session.reportTransientStatus(
+          error instanceof Error ? error.message : "Export failed.",
+          3_000,
+        );
+      } finally {
+        setExporting(false);
+      }
+    },
+    [session.document, session.reportTransientStatus, session.title],
+  );
+
+  const requestExport = useCallback(async () => {
+    if (!session.document) return;
+    try {
+      await session.saveNow();
+      session.reportTransientStatus("Reviewing open loops before export…");
+      const review = await reviewDocumentExport(session.document.id);
+      await ledger.refresh();
+      if (review.blockingIssues.length > 0) {
+        setExportReview(review);
+        session.reportTransientStatus();
+        return;
+      }
+      await downloadExport(false);
+    } catch (error) {
+      session.reportTransientStatus(
+        error instanceof Error ? error.message : "Export review failed.",
+        3_000,
+      );
+    }
+  }, [downloadExport, ledger, session]);
+
+  const confirmDeleteLocalData = useCallback(async () => {
+    setDeletePending(true);
+    try {
+      await deleteLocalData();
+      window.localStorage.removeItem(DOCUMENT_STORAGE_KEY);
+      window.localStorage.removeItem(APP_SETTINGS_STORAGE_KEY);
+      window.location.reload();
+    } catch (error) {
+      setDeletePending(false);
+      setDeleteConfirmationOpen(false);
+      session.reportTransientStatus(
+        error instanceof Error ? error.message : "Could not delete local data.",
+        4_000,
+      );
+    }
+  }, [session.reportTransientStatus]);
 
   const requestSelectionCritique = useCallback(
     (selection: EditorCriticSelection, confirmed = false) => {
@@ -289,7 +359,7 @@ export function App() {
           </div>
           <FileMenu
             documentTitle={session.title}
-            onDownload={downloadMarkdown}
+            onDownload={requestExport}
             onNew={newDocument}
             onOpen={openMarkdown}
             onSave={async () => {
@@ -521,11 +591,56 @@ export function App() {
       <SettingsDialog
         modelStatus={modelStatus}
         onClose={() => setSettingsOpen(false)}
+        onRequestDeleteLocalData={() => setDeleteConfirmationOpen(true)}
         onReset={appSettings.resetSettings}
         onSave={appSettings.setSettings}
         open={settingsOpen}
         settings={appSettings.settings}
       />
+
+      <ExportReviewDialog
+        exporting={exporting}
+        onCancel={() => setExportReview(null)}
+        onExport={() => void downloadExport(true)}
+        review={exportReview ?? undefined}
+      />
+
+      {deleteConfirmationOpen ? (
+        <div className="dialog-backdrop destructive-backdrop">
+          <section
+            aria-describedby="delete-data-description"
+            aria-labelledby="delete-data-title"
+            aria-modal="true"
+            className="destructive-dialog"
+            role="alertdialog"
+          >
+            <p className="eyebrow">Privacy control</p>
+            <h2 id="delete-data-title">Delete all local OpenLoop data?</h2>
+            <p id="delete-data-description">
+              This permanently removes documents, issues and their histories,
+              chats, model-run metadata, optional training traces, and
+              preferences from this device.
+            </p>
+            <div className="dialog-actions">
+              <button
+                disabled={deletePending}
+                onClick={() => setDeleteConfirmationOpen(false)}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="danger-button"
+                disabled={deletePending}
+                onClick={() => void confirmDeleteLocalData()}
+                type="button"
+              >
+                {deletePending ? "Deleting…" : "Delete local data"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

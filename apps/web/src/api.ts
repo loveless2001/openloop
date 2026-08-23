@@ -4,6 +4,8 @@ import {
   CriticAgentStatusResponseSchema,
   DocumentBundleSchema,
   DocumentRecordSchema,
+  DeleteLocalDataResponseSchema,
+  ExportReviewResponseSchema,
   IssueActionResponseSchema,
   IssueChatResponseSchema,
   IssueChatSendResponseSchema,
@@ -20,6 +22,7 @@ import {
   type IssueChatSendRequest,
   type IssueRecord,
   type EditorChangeBatch,
+  type ExportReviewResponse,
   type JsonValue,
   type ModelStatusResponse,
   type ReconcileRequest,
@@ -85,6 +88,32 @@ export async function requestResurfacing(
     body: JSON.stringify(input),
   });
   return ResurfaceResponseSchema.parse(await parseResponse(response));
+}
+
+export async function reviewDocumentExport(
+  documentId: string,
+): Promise<ExportReviewResponse> {
+  const response = await fetch(`/v1/documents/${documentId}/export-review`, {
+    method: "POST",
+  });
+  return ExportReviewResponseSchema.parse(await parseResponse(response));
+}
+
+export async function downloadDocumentExport(
+  documentId: string,
+  force: boolean,
+): Promise<Blob> {
+  const query = force ? "?force=true" : "";
+  const response = await fetch(`/v1/documents/${documentId}/export.md${query}`);
+  if (!response.ok) {
+    await parseResponse(response);
+  }
+  return response.blob();
+}
+
+export async function deleteLocalData(): Promise<void> {
+  const response = await fetch("/v1/local-data", { method: "DELETE" });
+  DeleteLocalDataResponseSchema.parse(await parseResponse(response));
 }
 
 export async function loadIssues(

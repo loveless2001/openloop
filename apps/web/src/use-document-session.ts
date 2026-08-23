@@ -15,7 +15,7 @@ import { mergeChangeBatches } from "./editor/change-tracker.js";
 import type { AppSettings } from "./app-settings.js";
 import { useCriticScheduler } from "./use-critic-scheduler.js";
 
-const DOCUMENT_STORAGE_KEY = "openloop.documentId";
+export const DOCUMENT_STORAGE_KEY = "openloop.documentId";
 
 export type SaveStatus =
   "loading" | "saved" | "dirty" | "saving" | "error" | "conflict";

@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, rm } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
 import type { CompletionInteractionRequest } from "@openloop/shared";
@@ -85,6 +85,11 @@ export class TrainingTraceWriter {
 
   async flush(): Promise<void> {
     await this.pending;
+  }
+
+  async deleteLocalData(): Promise<void> {
+    await this.flush();
+    await rm(this.path, { force: true });
   }
 
   private append(trace: TracePayload<CompletionTrainingTrace>): Promise<void> {

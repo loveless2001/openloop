@@ -48,6 +48,45 @@ const validIssue = {
   keywords: ["model", "quality"],
 };
 
+const reconcileInput = {
+  requestId: "d5db20b4-3634-4375-b088-a191ce9f2679",
+  documentVersion: 2,
+  issue: {
+    id: "72115350-43d6-4187-af78-80fe978ec77b",
+    documentId: "da7342a0-68f8-4bb4-a414-15c0eecb9f82",
+    type: "ambiguity" as const,
+    status: "needs_review" as const,
+    question: "Does compatibility imply equal quality?",
+    rationale: "Those claims differ.",
+    severity: 4 as const,
+    confidence: 0.9,
+    interruptWorthiness: 0.9,
+    anchor: {
+      nodeId: "19132842-6cb5-4809-b55d-87f6410971d0",
+      quote: "any model will work equally well",
+      leftContext: "",
+      rightContext: "",
+      normalizedFingerprint: "a".repeat(64),
+      sourceDocumentVersion: 1,
+      detached: false,
+    },
+    keywords: ["model", "quality"],
+    resurfaceTriggers: ["claim_reused" as const],
+    dedupeKey: "b".repeat(64),
+    shownCount: 1,
+    silentIgnoreCount: 0,
+    createdAt: "2026-08-18T00:00:00.000Z",
+    updatedAt: "2026-08-18T00:00:00.000Z",
+  },
+  currentBlock: {
+    nodeId: "19132842-6cb5-4809-b55d-87f6410971d0",
+    nodeType: "paragraph" as const,
+    text: "The harness is API-compatible but model quality still differs.",
+    headingPath: [],
+  },
+  nearbyBlocks: [],
+};
+
 describe("MockModelAdapter", () => {
   it("streams a deterministic context-sensitive completion", async () => {
     const chunks: string[] = [];
@@ -375,6 +414,28 @@ describe("OpenAICompatibleAdapter", () => {
       const pending = iterator.next();
       const outcome = pending.catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(8_001);
+      expect(await outcome).toMatchObject({ code: "MODEL_TIMEOUT" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("maps the reconciliation deadline to MODEL_TIMEOUT", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImplementation = vi.fn<typeof fetch>((_input, init) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new Error("deadline")),
+            { once: true },
+          );
+        });
+      });
+      const outcome = adapterWithFetch(fetchImplementation)
+        .reconcile(reconcileInput, new AbortController().signal)
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(20_001);
       expect(await outcome).toMatchObject({ code: "MODEL_TIMEOUT" });
     } finally {
       vi.useRealTimers();

@@ -477,6 +477,18 @@ export const ResurfaceResponseSchema = z.object({
   issue: IssueRecordSchema.optional(),
 });
 
+export const ExportReviewResponseSchema = z.object({
+  blockingIssues: z.array(IssueRecordSchema),
+  openIssueCount: z.number().int().nonnegative(),
+  needsReconciliation: z.boolean(),
+});
+
+export type ExportReviewResponse = z.infer<typeof ExportReviewResponseSchema>;
+
+export const DeleteLocalDataResponseSchema = z.object({
+  deleted: z.literal(true),
+});
+
 export const CompletionStreamRequestSchema = z.object({
   requestId: z.uuid(),
   documentId: z.uuid(),

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -98,10 +98,11 @@ describe("Phase 0/1 server", () => {
 
     const tables = database.sqlite
       .prepare(
-        "select name from sqlite_master where type = 'table' and name in ('documents', 'issues', 'issue_events', 'issue_chat_threads', 'issue_chat_messages', 'model_runs', 'preference_weights') order by name",
+        "select name from sqlite_master where type = 'table' and name in ('documents', 'document_events', 'issues', 'issue_events', 'issue_chat_threads', 'issue_chat_messages', 'model_runs', 'preference_weights') order by name",
       )
       .all() as Array<{ name: string }>;
     expect(tables.map(({ name }) => name)).toEqual([
+      "document_events",
       "documents",
       "issue_chat_messages",
       "issue_chat_threads",
@@ -117,6 +118,7 @@ describe("Phase 0/1 server", () => {
       )
       .all() as Array<{ name: string }>;
     expect(indexes.map(({ name }) => name)).toEqual([
+      "document_events_document_created_idx",
       "issue_chat_messages_issue_created_idx",
       "issue_chat_threads_document_updated_idx",
       "issue_events_document_created_idx",
@@ -570,15 +572,23 @@ describe("Phase 0/1 server", () => {
     expect(saveResponse.statusCode).toBe(200);
     expect(saveResponse.json().impactedIssueIds).toContain(issueId);
 
-    await vi.waitFor(async () => {
-      const response = await server.inject({
-        method: "GET",
-        url: `/v1/documents/${documentId}/issues`,
-      });
-      expect(response.json().issues[0]).toMatchObject({
-        id: issueId,
-        status: "resolved",
-      });
+    const exportReview = await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/export-review`,
+    });
+    expect(exportReview.statusCode).toBe(200);
+    expect(exportReview.json()).toMatchObject({
+      blockingIssues: [],
+      needsReconciliation: false,
+      openIssueCount: 0,
+    });
+    const reconciled = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}/issues`,
+    });
+    expect(reconciled.json().issues[0]).toMatchObject({
+      id: issueId,
+      status: "resolved",
     });
     const events = await server.inject({
       method: "GET",
@@ -696,5 +706,191 @@ describe("Phase 0/1 server", () => {
         details: { currentVersion: 1 },
       },
     });
+  });
+
+  it("reviews high-severity loops, enforces force, and exports document-only Markdown", async () => {
+    const headingId = "ef51f131-50cd-40e5-9720-e8f784360849";
+    const paragraphId = "e99d1ad1-8015-49f5-8d65-216297677e41";
+    const claim =
+      "The whole product is model agnostic, so any model will work equally well.";
+    const created = await server.inject({
+      method: "POST",
+      url: "/v1/documents",
+      payload: {
+        title: "Phase 6: Review",
+        contentJson: {
+          type: "doc",
+          content: [
+            {
+              type: "heading",
+              attrs: { level: 1, nodeId: headingId },
+              content: [{ type: "text", text: "Provider claims" }],
+            },
+            {
+              type: "paragraph",
+              attrs: { nodeId: paragraphId },
+              content: [
+                { type: "text", text: "Important", marks: [{ type: "bold" }] },
+                { type: "text", text: `: ${claim}` },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const documentId = created.json().id as string;
+    await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/critic-jobs`,
+      payload: {
+        requestId: "35ac6e0b-cf6b-49a5-aa3f-993cb43bb267",
+        documentVersion: 0,
+        trigger: "manual",
+        scope: { kind: "changes" },
+        changedBlocks: [
+          {
+            nodeId: paragraphId,
+            nodeType: "paragraph",
+            text: `Important: ${claim}`,
+            headingPath: ["Provider claims"],
+          },
+        ],
+      },
+    });
+
+    let issueId = "";
+    await vi.waitFor(async () => {
+      const issues = await server.inject({
+        method: "GET",
+        url: `/v1/documents/${documentId}/issues`,
+      });
+      expect(issues.json().issues).toHaveLength(1);
+      issueId = issues.json().issues[0].id;
+    });
+
+    const review = await server.inject({
+      method: "POST",
+      url: `/v1/documents/${documentId}/export-review`,
+    });
+    expect(review.statusCode).toBe(200);
+    expect(review.json()).toMatchObject({
+      openIssueCount: 1,
+      needsReconciliation: false,
+      blockingIssues: [{ id: issueId, severity: 4, status: "open" }],
+    });
+
+    const blocked = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}/export.md`,
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json()).toMatchObject({
+      error: { code: "EXPORT_BLOCKED" },
+    });
+
+    const exported = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}/export.md?force=true`,
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers["content-type"]).toContain("text/markdown");
+    expect(exported.headers["content-disposition"]).toContain(
+      'filename="Phase 6- Review.md"',
+    );
+    expect(exported.body).toBe(
+      `# Provider claims\n\n**Important**: ${claim}\n`,
+    );
+    expect(exported.body).not.toContain("Do you mean");
+
+    const exportEvent = database.sqlite
+      .prepare(
+        "select action, document_version as documentVersion, payload_json as payloadJson from document_events where document_id = ?",
+      )
+      .get(documentId) as {
+      action: string;
+      documentVersion: number;
+      payloadJson: string;
+    };
+    expect(exportEvent.action).toBe("document_exported");
+    expect(JSON.parse(exportEvent.payloadJson)).toEqual({
+      openIssueCount: 1,
+      blockingIssueCount: 1,
+      forced: true,
+    });
+    expect(exportEvent.payloadJson).not.toContain(claim);
+
+    await server.inject({
+      method: "POST",
+      url: `/v1/issues/${issueId}/actions`,
+      payload: { action: "resolve", documentVersion: 0 },
+    });
+    const unblocked = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${documentId}/export.md`,
+    });
+    expect(unblocked.statusCode).toBe(200);
+  });
+
+  it("deletes every local data category in one confirmed request", async () => {
+    const issue = database.sqlite
+      .prepare("select id, document_id as documentId from issues limit 1")
+      .get() as { id: string; documentId: string };
+    const now = Date.now();
+    database.sqlite
+      .prepare(
+        "insert into issue_chat_threads (issue_id, document_id, state, created_at, updated_at) values (?, ?, 'idle', ?, ?)",
+      )
+      .run(issue.id, issue.documentId, now, now);
+    database.sqlite
+      .prepare(
+        "insert into issue_chat_messages (id, issue_id, role, kind, content, attachments_json, created_at) values (?, ?, 'user', 'message', 'private chat text', '[]', ?)",
+      )
+      .run("f668cf84-34cc-4784-b4ed-5c963096aab3", issue.id, now);
+
+    const tableNames = [
+      "issue_chat_messages",
+      "issue_chat_threads",
+      "issue_events",
+      "document_events",
+      "issues",
+      "model_runs",
+      "documents",
+      "preference_weights",
+    ];
+    const counts = () =>
+      Object.fromEntries(
+        tableNames.map((table) => {
+          const row = database.sqlite
+            .prepare(`select count(*) as count from ${table}`)
+            .get() as { count: number };
+          return [table, row.count];
+        }),
+      );
+    const before = counts();
+    database.sqlite.exec(
+      "create trigger prevent_document_delete before delete on documents begin select raise(abort, 'blocked'); end",
+    );
+    const failed = await server.inject({
+      method: "DELETE",
+      url: "/v1/local-data",
+    });
+    expect(failed.statusCode).toBe(500);
+    expect(counts()).toEqual(before);
+    database.sqlite.exec("drop trigger prevent_document_delete");
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: "/v1/local-data",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ deleted: true });
+    expect(existsSync(environment.TRAINING_TRACE_PATH)).toBe(false);
+
+    for (const table of tableNames) {
+      const row = database.sqlite
+        .prepare(`select count(*) as count from ${table}`)
+        .get() as { count: number };
+      expect(row.count, table).toBe(0);
+    }
   });
 });

@@ -107,7 +107,9 @@ export class MockModelAdapter implements ModelAdapter {
     const currentText = input.currentBlock?.text ?? "";
     const normalized = currentText.toLocaleLowerCase();
     if (
-      normalized.includes("api-compatible") &&
+      (normalized.includes("api-compatible") ||
+        (normalized.includes("provider-agnostic") &&
+          normalized.includes("api boundary"))) &&
       normalized.includes("quality")
     ) {
       return {

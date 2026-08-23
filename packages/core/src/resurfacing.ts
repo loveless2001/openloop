@@ -54,12 +54,17 @@ function matchesClaimReuse(
     const keywordMatches = issue.keywords.filter((keyword) =>
       includesKeyword(block.text, keyword),
     ).length;
-    if (keywordMatches < 2) return false;
+    const repeatsEquivalenceClaim =
+      keywordMatches >= 1 &&
+      /\b(?:does not matter|equall?y|equivalent|identical|the same)\b/i.test(
+        block.text,
+      );
+    if (keywordMatches < 2 && !repeatsEquivalenceClaim) return false;
     const overlap = Math.max(
       tokenJaccard(block.text, issue.anchor.quote),
       tokenJaccard(block.text, issue.question),
     );
-    return overlap >= 0.35;
+    return repeatsEquivalenceClaim || overlap >= 0.35;
   });
 }
 

@@ -1,14 +1,15 @@
 # Architecture
 
-This document describes the implemented Phase 0–5 slice plus the current Markdown/file workflow.
+This document describes the implemented Phase 0–6 MVP.
 
 The browser owns the TipTap editor, stable node IDs, changed-node tracking, dirty state, and
 autosave scheduling. It sends canonical TipTap JSON, derived text, a base version, and an
 accumulated `EditorChangeBatch` to the Fastify API after the writer-configured autosave delay.
 
-The official TipTap Markdown bridge parses opened `.md` files and serializes downloads. Markdown
-is the user-facing file format, while TipTap JSON remains the internal anchor-preserving format.
-Imported blocks receive fresh stable IDs; exported files omit IDs and issue metadata.
+The official TipTap Markdown bridge parses opened `.md` files. Markdown is the user-facing file
+format, while TipTap JSON remains the internal anchor-preserving format. Imported blocks receive
+fresh stable IDs. Export serialization runs from canonical saved JSON on the server, so files omit
+IDs and issue metadata and cannot bypass the ledger review with stale browser content.
 
 The browser also owns completion eligibility, debounce, request cancellation, staleness checks,
 and the ProseMirror ghost-text decoration. Completion text remains outside TipTap JSON until the
@@ -41,7 +42,8 @@ SQLite lives under `data/` by default. Drizzle defines the complete baseline dat
 the specification so later vertical slices can add behavior without replacing persistence. Phase
 3 uses `documents`, `model_runs`, `issues`, and append-only `issue_events`. Issue conversations add
 one thread per issue plus ordered `issue_chat_messages`; Phase 5 updates local-user preference
-weights from explicit actions and sustained non-response.
+weights from explicit actions and sustained non-response. Phase 6 adds append-only
+`document_events` for metadata-only export records.
 
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
 mock implementation, and Ollama/OpenAI-compatible implementation.
@@ -154,6 +156,17 @@ updated in place, labeled **Still open**, and receives another append-only `show
 review uses the same scheduler but may bypass interruption cooldowns. Thirty seconds of continued
 editing elsewhere after an automatic show records `silent_ignore`; preference weights remain
 bounded between `0.5` and `1.5` and never make the decision by themselves.
+
+Phase 6 makes export a server-authoritative boundary. The browser saves first, then
+`POST /v1/documents/:documentId/export-review` synchronously drains pending reconciliation for that
+document and returns all active severity-4/5 obligations. `GET .../export.md` recomputes the review
+and returns `EXPORT_BLOCKED` unless `force=true` when blocking issues exist. A successful response
+serializes only document content and appends `document_exported` with document version, open count,
+blocking count, and whether force was used; neither issue comments nor document text enter the
+event. `DELETE /v1/local-data` removes messages, threads, issue and document events, issues, model
+runs, documents, and preferences in foreign-key order inside one SQLite transaction. The confirmed
+action also removes the configured optional training-trace file before the browser removes only
+OpenLoop-owned local-storage keys.
 
 `@openloop/automerge-spike` is an isolated architecture experiment, not production persistence. It
 tests relative cursor anchors, explicit unanchoring after deletion, history, critic forks, whole

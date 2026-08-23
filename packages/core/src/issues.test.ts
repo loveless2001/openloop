@@ -92,4 +92,52 @@ describe("issue domain", () => {
       ),
     ).toThrow(InvalidIssueTransitionError);
   });
+
+  it("enforces the complete issue status/action transition matrix", () => {
+    const statuses = [
+      "open",
+      "snoozed",
+      "needs_review",
+      "resolved",
+      "dismissed",
+      "invalidated",
+    ] as const;
+    const events = [
+      { action: "apply_rewrite" as const },
+      {
+        action: "snooze" as const,
+        snoozedUntil: new Date("2026-08-18T01:02:00.000Z"),
+      },
+      { action: "dismiss" as const },
+      { action: "resolve" as const },
+      { action: "silent_ignore" as const },
+      { action: "reopen" as const },
+    ];
+    const allowed: Record<(typeof statuses)[number], string[]> = {
+      open: ["apply_rewrite", "snooze", "dismiss", "resolve", "silent_ignore"],
+      snoozed: ["apply_rewrite", "snooze", "dismiss", "resolve"],
+      needs_review: ["apply_rewrite", "snooze", "dismiss", "resolve"],
+      resolved: ["reopen"],
+      dismissed: ["reopen"],
+      invalidated: [],
+    };
+
+    for (const status of statuses) {
+      for (const event of events) {
+        const apply = () =>
+          transitionIssue(
+            { ...issue, status },
+            event,
+            new Date("2026-08-18T01:00:00.000Z"),
+          );
+        if (allowed[status].includes(event.action)) {
+          expect(apply, `${status} -> ${event.action}`).not.toThrow();
+        } else {
+          expect(apply, `${status} -> ${event.action}`).toThrow(
+            InvalidIssueTransitionError,
+          );
+        }
+      }
+    }
+  });
 });

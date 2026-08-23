@@ -58,6 +58,35 @@ function block(text: string): TextBlockSnapshot {
 }
 
 describe("resurfacing scheduler", () => {
+  it("recognizes a conclusion that repeats a model-equivalence claim", () => {
+    const candidate = issue({
+      keywords: ["model", "interface", "quality"],
+      shownCount: 1,
+      lastShownAt: new Date(0).toISOString(),
+    });
+    expect(
+      selectResurfaceIssue({
+        issues: [candidate],
+        trigger: "claim_reused",
+        changedBlocks: [
+          {
+            nodeId: "09cf5b4f-5169-41ef-82f0-d53b87934364",
+            nodeType: "paragraph",
+            text: "Therefore model choice does not matter to the product.",
+            headingPath: ["Conclusion"],
+          },
+        ],
+        documentVersion: 2,
+        now: new Date("2026-08-21T00:10:00.000Z"),
+        attention: {
+          userIdleMs: 1_200,
+          completionVisible: false,
+          issueCardExpanded: false,
+        },
+      })?.issue.id,
+    ).toBe(candidate.id);
+  });
+
   it("selects the same issue when a different block reuses its claim", () => {
     const selected = selectResurfaceIssue({
       issues: [issue()],

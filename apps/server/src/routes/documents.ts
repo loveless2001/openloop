@@ -1,5 +1,6 @@
 import {
   CreateDocumentRequestSchema,
+  ExportReviewResponseSchema,
   ResurfaceRequestSchema,
   SaveDocumentRequestSchema,
 } from "@openloop/shared";
@@ -20,8 +21,15 @@ import { remapImpactedIssues } from "../reconciliation.js";
 import { IssueNotFoundError, listIssues } from "../issues.js";
 import { listPreferenceWeights } from "../preferences.js";
 import { resurfaceIssue } from "../resurfacing.js";
+import {
+  portableMarkdownFilename,
+  recordDocumentExport,
+  reviewExport,
+  tipTapJsonToMarkdown,
+} from "../export.js";
 
 const DocumentParamsSchema = z.object({ documentId: z.uuid() });
+const ExportQuerySchema = z.object({ force: z.literal("true").optional() });
 
 export function registerDocumentRoutes(
   server: FastifyInstance,
@@ -41,6 +49,40 @@ export function registerDocumentRoutes(
       issues: listIssues(database, documentId),
       preferences: listPreferenceWeights(database),
     };
+  });
+
+  server.post("/v1/documents/:documentId/export-review", async (request) => {
+    const { documentId } = DocumentParamsSchema.parse(request.params);
+    getDocument(database, documentId);
+    await reconciliationQueue.flush(documentId);
+    return ExportReviewResponseSchema.parse(reviewExport(database, documentId));
+  });
+
+  server.get("/v1/documents/:documentId/export.md", async (request, reply) => {
+    const { documentId } = DocumentParamsSchema.parse(request.params);
+    const { force } = ExportQuerySchema.parse(request.query);
+    const document = getDocument(database, documentId);
+    const review = reviewExport(database, documentId);
+    if (review.blockingIssues.length > 0 && force !== "true") {
+      return reply.code(409).send({
+        error: {
+          code: "EXPORT_BLOCKED",
+          message: "High-severity open issues require export confirmation.",
+          requestId: request.id,
+          details: review,
+        },
+      });
+    }
+    recordDocumentExport(database, documentId, review, force === "true");
+    const filename = portableMarkdownFilename(document.title);
+    const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "-");
+    return reply
+      .header("content-type", "text/markdown; charset=utf-8")
+      .header(
+        "content-disposition",
+        `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      )
+      .send(tipTapJsonToMarkdown(document.contentJson));
   });
 
   server.post("/v1/documents/:documentId/resurface", async (request) => {

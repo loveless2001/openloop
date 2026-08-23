@@ -110,7 +110,7 @@ export function FileMenu({
             <kbd>Ctrl S</kbd>
           </button>
           <button onClick={() => run(onDownload)} role="menuitem" type="button">
-            <span>Download {markdownFilename(documentTitle)}</span>
+            <span>Export {markdownFilename(documentTitle)}…</span>
           </button>
         </div>
       ) : null}

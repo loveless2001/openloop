@@ -1124,7 +1124,9 @@ textarea {
   background: rgb(24 31 28 / 42%);
 }
 
-.conflict-dialog {
+.conflict-dialog,
+.export-review-dialog,
+.destructive-dialog {
   width: min(480px, calc(100vw - 48px));
   padding: 30px;
   border: 1px solid #d5d0c5;
@@ -1146,13 +1148,17 @@ textarea {
   box-shadow: 0 24px 80px rgb(24 31 28 / 24%);
 }
 
-.selection-warning-dialog h2 {
+.selection-warning-dialog h2,
+.export-review-dialog h2,
+.destructive-dialog h2 {
   margin: 6px 0 12px;
   color: #6e481f;
   font-family: Georgia, serif;
 }
 
-.selection-warning-dialog p:not(.eyebrow) {
+.selection-warning-dialog p:not(.eyebrow),
+.export-review-dialog p:not(.eyebrow),
+.destructive-dialog p:not(.eyebrow) {
   color: #5f5951;
   line-height: 1.55;
 }
@@ -1188,6 +1194,59 @@ textarea {
   border-color: #1f5b4a;
   color: #fff;
   background: #1f5b4a;
+}
+
+.dialog-actions .danger-button,
+.danger-button {
+  border-color: #9a4036;
+  color: #fff;
+  background: #9a4036;
+}
+
+.export-review-backdrop,
+.destructive-backdrop {
+  z-index: 50;
+}
+
+.export-review-dialog,
+.destructive-dialog {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.export-review-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  margin: 18px 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.export-review-list li {
+  display: grid;
+  gap: 5px;
+  padding: 13px 14px;
+  border: 1px solid #dec8a7;
+  border-radius: 7px;
+  background: #fff8ec;
+}
+
+.export-review-list span,
+.export-review-count,
+.export-review-list small {
+  color: #81705f;
+  font-size: 12px;
+}
+
+.export-review-list strong {
+  color: #4b3827;
+  font-size: 13px;
+}
+
+.export-review-warning {
+  color: #8a4d20 !important;
+  font-weight: 700;
 }
 
 .settings-backdrop {
@@ -1345,6 +1404,37 @@ textarea {
   padding: 16px;
   border-radius: 9px;
   background: #edf4f0;
+}
+
+.privacy-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid #e0c7c2;
+  border-radius: 9px;
+  background: #fff8f6;
+}
+
+.privacy-settings p {
+  margin: 0 0 4px;
+  color: #713c34;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.privacy-settings small {
+  color: #7c6863;
+  line-height: 1.4;
+}
+
+.privacy-settings button {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid #9a4036;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .model-settings-summary p {

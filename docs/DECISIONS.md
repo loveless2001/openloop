@@ -250,3 +250,17 @@ The editor currently requests completion only at the end of a text block, so the
 not consume suffix text. This is deliberate: a general prose base model was preferred over a
 code-oriented FIM checkpoint. If mid-block completion becomes a product requirement, it needs a
 separately evaluated suffix-aware model contract rather than an instruction shim.
+
+## 028 — Make export and deletion server-authoritative privacy boundaries
+
+The browser cannot export its transient editor serializer directly. It first saves, asks the server
+to drain document reconciliation, and reviews active severity-4/5 issues. The Markdown endpoint
+recomputes that gate and requires `force=true` when blockers remain, preventing a stale or custom
+client from skipping explicit confirmation. Successful exports append a document-level event with
+counts and version only; the document and issue-comment text are deliberately absent.
+
+Delete local data uses one database transaction in dependency order, including issue chats and
+export events added after the baseline specification. A failure at any database deletion rolls the
+entire transaction back. After that commit, the server removes the configured optional training
+trace; browser settings and the current-document pointer are removed only after the server confirms
+success. This keeps the visible UI state aligned with the privacy operation.

@@ -8,15 +8,16 @@ as the same open loop when the writer relies on the unresolved claim again. Mode
 replaceable; the document, issue history, and decision about when an objection may interrupt belong
 to the harness.
 
-This repository currently implements the editor, local persistence, inline completion, critic
-issue ledger, anchor reconciliation, and deterministic resurfacing from Phases 0–5 of
-`openloop-cowriter-harness-spec.md`. The formal unresolved-issue export review remains Phase 6 work.
+This repository implements the Phase 0–6 MVP in
+`openloop-cowriter-harness-spec.md`: editor and local persistence, inline completion, the critic
+issue ledger, anchor reconciliation, deterministic resurfacing, guarded Markdown export, and local
+privacy controls.
 
 The implemented vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
 versions; local SQLite persistence; streamed ghost-text completion; queued changed-block critique;
 anchored gutter markers; persistent issue actions and history; and visible dirty, saving, conflict,
-and error states. Markdown files can be opened and downloaded from the File menu.
+and error states. Markdown files can be opened and exported from the File menu.
 
 ## Requirements
 
@@ -178,14 +179,20 @@ activation boundary.
 
 ## Markdown files and toolbar
 
-The editor uses TipTap's Markdown parser/serializer while retaining internal TipTap JSON and stable
-node IDs for issue anchoring. The File menu supports New, Open Markdown, Save locally, and Download
-Markdown. `Ctrl/Cmd+N`, `Ctrl/Cmd+O`, and `Ctrl/Cmd+S` provide the same operations. Opening a file
+The editor uses TipTap's Markdown parser while retaining internal TipTap JSON and stable node IDs
+for issue anchoring. The File menu supports New, Open Markdown, Save locally, and Export Markdown.
+`Ctrl/Cmd+N`, `Ctrl/Cmd+O`, and `Ctrl/Cmd+S` provide the same non-export operations. Opening a file
 creates a new locally persisted document; it does not overwrite the previous document.
 
 The compact toolbar applies Markdown-compatible bold, italic, inline code, headings, lists, and
-blockquote formatting. Downloaded `.md` files contain document content only; internal node IDs and
-issue comments are not included.
+blockquote formatting. Export first saves the draft and drains affected-anchor reconciliation. If
+severity-4/5 obligations remain, a review dialog lists them and requires the writer to return or
+explicitly export anyway. The server enforces the same guard and serializes canonical TipTap JSON;
+the `.md` contains document content only. Export events store version and issue counts, never text.
+
+Settings includes a confirmed **Delete local data** action. It transactionally clears documents,
+issues, event history, issue chats, model-run metadata, export events, and preference weights, then
+removes optional training traces plus the OpenLoop browser profile and current-document pointer.
 
 ## Critic and issue ledger
 
@@ -242,11 +249,11 @@ The focused tests cover shared request schemas, document persistence, stable nod
 changed-node accumulation, model adapter validation and cancellation, completion SSE, ghost-text
 acceptance/dismissal/staleness, issue state transitions, critic filtering/deduplication, persistent
 actions/history, anchor ambiguity and remapping, deterministic resurfacing and cooldown gates,
+export blocking/force behavior, metadata-only export events, transactional local-data deletion,
 preference updates, Automerge cursor/branch behavior, MCP bearer and lease enforcement, CLI job
 routing, stale-result rejection, and gutter rendering. Three Playwright tests cover focused
-selection critique, persisted issue chat, and defer-to-claim-reuse resurfacing with the same issue
-ID. The formal unresolved-issue export review and the resolution/export tail of the full browser
-scenario remain Phase 6 work.
+selection critique, persisted issue chat, and the complete completion → Later → same-ID resurfacing
+→ revision → resolved-history → Markdown-export scenario.
 
 ## Workspace
 
