@@ -5,6 +5,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 export const documents = sqliteTable("documents", {
@@ -152,6 +153,57 @@ export const modelRuns = sqliteTable("model_runs", {
   errorCode: text("error_code"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const writingRubrics = sqliteTable("writing_rubrics", {
+  id: text("id").primaryKey(),
+  revision: integer("revision").notNull(),
+  title: text("title").notNull(),
+  contentJson: text("content_json").notNull(),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+export const writingEvaluationRuns = sqliteTable(
+  "writing_evaluation_runs",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    requestIdentityHash: text("request_identity_hash").notNull(),
+    documentVersion: integer("document_version").notNull(),
+    rubricId: text("rubric_id").notNull(),
+    rubricRevision: integer("rubric_revision").notNull(),
+    inputHash: text("input_hash").notNull(),
+    snapshotJson: text("snapshot_json").notNull(),
+    compiledRequestJson: text("compiled_request_json").notNull(),
+    compiledEvaluationJson: text("compiled_evaluation_json").notNull(),
+    requestedModel: text("requested_model").notNull(),
+    returnedModel: text("returned_model"),
+    providerId: text("provider_id").notNull(),
+    status: text("status").notNull(),
+    resultJson: text("result_json"),
+    policyVersion: text("policy_version").notNull(),
+    policyJson: text("policy_json").notNull(),
+    providerCalled: integer("provider_called").notNull(),
+    durationMs: integer("duration_ms"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    completedAt: integer("completed_at"),
+  },
+  (table) => [
+    uniqueIndex("writing_evaluation_runs_request_id_idx").on(table.requestId),
+    index("writing_evaluation_runs_document_created_idx").on(
+      table.documentId,
+      table.createdAt,
+    ),
+  ],
+);
 
 export const preferenceWeights = sqliteTable(
   "preference_weights",

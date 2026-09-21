@@ -2,7 +2,12 @@ import type { EditorChangeBatch, TextBlockSnapshot } from "@openloop/shared";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { Transaction } from "@tiptap/pm/state";
 
-const TRACKED_TYPES = new Set(["paragraph", "heading", "blockquote"]);
+const TRACKED_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "blockquote",
+  "codeBlock",
+]);
 
 export function textBlockSnapshots(
   document: ProseMirrorNode,

@@ -51,6 +51,7 @@ interface OpenLoopEditorProps {
   onCursorBlockChange: (nodeId: string, orderedNodeIds: string[]) => void;
   onCriticTrigger: (trigger: CriticTrigger) => void;
   onCritiqueSelection: (selection: EditorCriticSelection) => void;
+  onEvaluateSelection: (selection: EditorCriticSelection) => void;
   onAddSelectionToChat: (selection: EditorCriticSelection) => void;
   onChange: (
     content: Record<string, JsonValue>,
@@ -99,6 +100,7 @@ export const OpenLoopEditor = forwardRef<
     onCursorBlockChange,
     onCriticTrigger,
     onCritiqueSelection,
+    onEvaluateSelection,
     onAddSelectionToChat,
     onChange,
     onSelectIssue,
@@ -120,6 +122,7 @@ export const OpenLoopEditor = forwardRef<
   const onCursorBlockChangeRef = useRef(onCursorBlockChange);
   const onCriticTriggerRef = useRef(onCriticTrigger);
   const onCritiqueSelectionRef = useRef(onCritiqueSelection);
+  const onEvaluateSelectionRef = useRef(onEvaluateSelection);
   const onAddSelectionToChatRef = useRef(onAddSelectionToChat);
   const onSelectIssueRef = useRef(onSelectIssue);
   const onSelectionChangeRef = useRef(onSelectionChange);
@@ -146,6 +149,7 @@ export const OpenLoopEditor = forwardRef<
   onCursorBlockChangeRef.current = onCursorBlockChange;
   onCriticTriggerRef.current = onCriticTrigger;
   onCritiqueSelectionRef.current = onCritiqueSelection;
+  onEvaluateSelectionRef.current = onEvaluateSelection;
   onAddSelectionToChatRef.current = onAddSelectionToChat;
   onSelectIssueRef.current = onSelectIssue;
   onSelectionChangeRef.current = onSelectionChange;
@@ -498,6 +502,16 @@ export const OpenLoopEditor = forwardRef<
             type="button"
           >
             Critique
+          </button>
+          <button
+            onClick={() =>
+              onEvaluateSelectionRef.current(activeSelection.selection)
+            }
+            onMouseDown={(event) => event.preventDefault()}
+            title="Evaluate only the highlighted text against a saved rubric"
+            type="button"
+          >
+            Evaluate
           </button>
           {activeChatIssueId ? (
             <button

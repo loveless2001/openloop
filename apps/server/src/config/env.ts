@@ -14,6 +14,7 @@ const ProviderSchema = z.enum([
   "openai-compatible",
 ]);
 const CriticProviderSchema = z.union([ProviderSchema, z.literal("cli-agent")]);
+const EvaluatorProviderSchema = z.enum(["mock", "disabled", "typesafe"]);
 
 const EnvironmentSchema = z
   .object({
@@ -47,6 +48,16 @@ const EnvironmentSchema = z
       .min(30_000)
       .max(900_000)
       .default(300_000),
+    EVALUATOR_PROVIDER: EvaluatorProviderSchema.default("mock"),
+    TYPESAFE_API_KEY: z.string().default(""),
+    JEV_API_BASE_URL: z.url().default("https://api.typesafe.ai/v1"),
+    JEV_MODEL: z.string().min(1).default("jev-1.13.0"),
+    JEV_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(120_000)
+      .default(30_000),
     CAPTURE_TRAINING_TRACES: booleanFromString.default(false),
     TRAINING_TRACE_PATH: z
       .string()

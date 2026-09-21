@@ -18,7 +18,7 @@ export const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
 
 export const TextBlockSnapshotSchema = z.object({
   nodeId: z.uuid(),
-  nodeType: z.enum(["paragraph", "heading", "blockquote"]),
+  nodeType: z.enum(["paragraph", "heading", "blockquote", "codeBlock"]),
   text: z.string(),
   previousText: z.string().optional(),
   previousNodeText: z.string().optional(),

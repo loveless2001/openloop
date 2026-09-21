@@ -27,6 +27,10 @@ import {
 } from "./use-document-session.js";
 import { useIssueLedger } from "./use-issue-ledger.js";
 import { useIssueChat } from "./use-issue-chat.js";
+import {
+  WritingEvaluationPanel,
+  type WritingEvaluationTarget,
+} from "./WritingEvaluationPanel.js";
 
 export function App() {
   const appSettings = useAppSettings();
@@ -47,6 +51,9 @@ export function App() {
   const [exporting, setExporting] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [sidePanel, setSidePanel] = useState<"issues" | "evaluation">("issues");
+  const [evaluationTarget, setEvaluationTarget] =
+    useState<WritingEvaluationTarget>({ kind: "document", generation: 0 });
   const [activeSelection, setActiveSelection] =
     useState<EditorCriticSelection | null>(null);
   const [oversizedSelection, setOversizedSelection] = useState<{
@@ -340,6 +347,28 @@ export function App() {
     ],
   );
 
+  const evaluateSelection = useCallback((selection: EditorCriticSelection) => {
+    setEvaluationTarget({
+      kind: "selection",
+      selection,
+      generation: resurfaceGenerationRef.current,
+    });
+    setSidePanel("evaluation");
+  }, []);
+
+  const prepareEvaluationVersion = useCallback(
+    async (capturedGeneration: number) => {
+      const savedVersion = await session.saveNow();
+      if (capturedGeneration !== resurfaceGenerationRef.current) {
+        throw new Error(
+          "The draft changed while saving. Capture the evaluation scope again.",
+        );
+      }
+      return savedVersion;
+    },
+    [session.saveNow],
+  );
+
   if (!session.document) {
     return (
       <main className="loading-shell" role="status">
@@ -392,6 +421,20 @@ export function App() {
             {activeSelection ? "Critique selection" : "Critique now"}
           </button>
           <button
+            className="critique-button"
+            onClick={() => {
+              setEvaluationTarget({
+                kind: "document",
+                generation: resurfaceGenerationRef.current,
+              });
+              setSidePanel("evaluation");
+            }}
+            title="Evaluate the complete saved document against a rubric"
+            type="button"
+          >
+            Evaluate document
+          </button>
+          <button
             className="settings-button"
             onClick={() => setSettingsOpen(true)}
             type="button"
@@ -425,6 +468,7 @@ export function App() {
               onCursorBlockChange={ledger.noteCursorMove}
               onCriticTrigger={session.requestCritic}
               onCritiqueSelection={requestSelectionCritique}
+              onEvaluateSelection={evaluateSelection}
               onAddSelectionToChat={addSelectionToChat}
               onChange={queueEditorChange}
               onSelectIssue={(issueId) => {
@@ -432,6 +476,7 @@ export function App() {
                   (entry) => entry.id === issueId,
                 );
                 ledger.selectIssue(issueId);
+                setSidePanel("issues");
                 if (issue) editorRef.current?.focusIssue(issue);
               }}
               onSelectionChange={setActiveSelection}
@@ -440,15 +485,49 @@ export function App() {
             />
           </div>
         </section>
-        <IssuePanel
-          issues={ledger.issues}
-          onManualReview={() => void ledger.resurface("manual_review")}
-          onSelect={(issue) => {
-            ledger.selectIssue(issue?.id);
-            if (issue) editorRef.current?.focusIssue(issue);
-          }}
-          selectedIssue={ledger.selectedIssue}
-        />
+        <div className="workspace-side">
+          <div
+            aria-label="Workspace panel"
+            className="workspace-tabs"
+            role="tablist"
+          >
+            <button
+              aria-selected={sidePanel === "issues"}
+              onClick={() => setSidePanel("issues")}
+              role="tab"
+              type="button"
+            >
+              Open loops
+            </button>
+            <button
+              aria-selected={sidePanel === "evaluation"}
+              onClick={() => setSidePanel("evaluation")}
+              role="tab"
+              type="button"
+            >
+              Evaluation
+            </button>
+          </div>
+          {sidePanel === "issues" ? (
+            <IssuePanel
+              issues={ledger.issues}
+              onManualReview={() => void ledger.resurface("manual_review")}
+              onSelect={(issue) => {
+                ledger.selectIssue(issue?.id);
+                if (issue) editorRef.current?.focusIssue(issue);
+              }}
+              selectedIssue={ledger.selectedIssue}
+            />
+          ) : (
+            <WritingEvaluationPanel
+              currentVersion={session.version}
+              documentId={session.document.id}
+              draftChanged={session.status !== "saved"}
+              onPrepareVersion={prepareEvaluationVersion}
+              target={evaluationTarget}
+            />
+          )}
+        </div>
       </main>
 
       {ledger.selectedIssue ? (
@@ -618,8 +697,9 @@ export function App() {
             <h2 id="delete-data-title">Delete all local OpenLoop data?</h2>
             <p id="delete-data-description">
               This permanently removes documents, issues and their histories,
-              chats, model-run metadata, optional training traces, and
-              preferences from this device.
+              chats, writing rubrics and evaluation snapshots, model-run
+              metadata, optional training traces, and preferences from this
+              device.
             </p>
             <div className="dialog-actions">
               <button

@@ -31,3 +31,13 @@ export type {
   ResurfaceSelectionInput,
   ResurfaceTrigger,
 } from "./resurfacing.js";
+export {
+  deriveWritingEvaluationResult,
+  evaluationDocumentText,
+  evaluationRequestIdentity,
+  evaluationTextBlocks,
+  prepareWritingEvaluation,
+  sha256,
+  stableJson,
+  WritingEvaluationPreparationError,
+} from "./writing-evaluation.js";

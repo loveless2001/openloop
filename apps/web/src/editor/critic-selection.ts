@@ -35,7 +35,7 @@ export function getCriticSelection(
   const blocks: TextBlockSnapshot[] = [];
   editor.state.doc.descendants((node, position) => {
     if (
-      !["paragraph", "heading", "blockquote"].includes(node.type.name) ||
+      !["paragraph", "heading", "codeBlock"].includes(node.type.name) ||
       typeof node.attrs.nodeId !== "string"
     ) {
       return;
@@ -48,7 +48,7 @@ export function getCriticSelection(
 
     const localFrom = selectedFrom - contentFrom;
     const localTo = selectedTo - contentFrom;
-    const text = node.textBetween(localFrom, localTo, " ");
+    const text = node.textBetween(localFrom, localTo, "\n");
     if (!text.trim()) return;
     const snapshot = snapshotById.get(node.attrs.nodeId);
     if (!snapshot) return;
@@ -57,8 +57,8 @@ export function getCriticSelection(
       nodeType: snapshot.nodeType,
       text,
       headingPath: snapshot.headingPath,
-      selectionStart: node.textBetween(0, localFrom, " ").length,
-      selectionEnd: node.textBetween(0, localTo, " ").length,
+      selectionStart: node.textBetween(0, localFrom, "\n").length,
+      selectionEnd: node.textBetween(0, localTo, "\n").length,
     });
   });
 

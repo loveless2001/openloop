@@ -1,4 +1,9 @@
 import Fastify from "fastify";
+import {
+  MockWritingEvaluator,
+  TypeSafeWritingEvaluator,
+  type WritingEvaluator,
+} from "@openloop/model-adapters";
 
 import type { Environment } from "./config/env.js";
 import { findWorkspaceRoot } from "./config/workspace.js";
@@ -28,9 +33,15 @@ import { registerCriticRoutes } from "./routes/critic.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { registerIssueChatRoutes } from "./routes/issue-chat.js";
 import { registerLocalDataRoutes } from "./routes/local-data.js";
+import { registerWritingEvaluationRoutes } from "./routes/writing-evaluations.js";
+import { registerWritingRubricRoutes } from "./routes/writing-rubrics.js";
 import { TrainingTraceWriter } from "./training-traces.js";
 import { registerCriticMcpRoute } from "./critic-mcp.js";
 import { IssueChatAgentBroker } from "./issue-chat-agent-broker.js";
+import {
+  WritingEvaluationService,
+  type EvaluatorConfiguration,
+} from "./writing-evaluation-service.js";
 
 interface BuildServerOptions {
   environment: Environment;
@@ -43,6 +54,60 @@ interface BuildServerOptions {
   issueChatAgentBroker?: IssueChatAgentBroker;
   mcpBearerToken?: string;
   reconciliationIdleMs?: number;
+  writingEvaluator?: WritingEvaluator;
+}
+
+function evaluatorConfiguration(
+  environment: Environment,
+): EvaluatorConfiguration {
+  if (environment.EVALUATOR_PROVIDER === "mock") {
+    return {
+      providerId: "mock",
+      requestedModel: "mock-writing-fixtures-v1",
+      endpointIdentity: "mock://local",
+      mode: "mock",
+      configured: true,
+      label: "Mock — UI test only",
+      destination: "local process",
+    };
+  }
+  const endpointIdentity = `${environment.JEV_API_BASE_URL.replace(/\/$/, "")}/systemone`;
+  return {
+    providerId: "typesafe",
+    requestedModel: environment.JEV_MODEL,
+    endpointIdentity,
+    mode: environment.EVALUATOR_PROVIDER === "disabled" ? "disabled" : "remote",
+    configured:
+      environment.EVALUATOR_PROVIDER === "typesafe" &&
+      Boolean(environment.TYPESAFE_API_KEY.trim()),
+    label:
+      environment.EVALUATOR_PROVIDER === "disabled"
+        ? "Writing evaluation disabled"
+        : "TypeSafe Jev — remote evaluation",
+    destination: new URL(endpointIdentity).host,
+  };
+}
+
+function defaultWritingEvaluator(
+  environment: Environment,
+): WritingEvaluator | undefined {
+  if (environment.EVALUATOR_PROVIDER === "mock") {
+    return new MockWritingEvaluator();
+  }
+  if (
+    environment.EVALUATOR_PROVIDER === "typesafe" &&
+    environment.TYPESAFE_API_KEY.trim()
+  ) {
+    return new TypeSafeWritingEvaluator({
+      apiKey: environment.TYPESAFE_API_KEY,
+      baseUrl: environment.JEV_API_BASE_URL,
+      timeoutMs: environment.JEV_TIMEOUT_MS,
+      allowInsecureLoopback:
+        environment.NODE_ENV === "test" &&
+        new URL(environment.JEV_API_BASE_URL).protocol === "http:",
+    });
+  }
+  return undefined;
 }
 
 export function buildServer({
@@ -56,6 +121,7 @@ export function buildServer({
   issueChatAgentBroker,
   mcpBearerToken,
   reconciliationIdleMs,
+  writingEvaluator,
 }: BuildServerOptions) {
   const ownsDatabase = database === undefined;
   const activeDatabase = database ?? openDatabase(environment.DATABASE_URL);
@@ -144,6 +210,13 @@ export function buildServer({
       reconciliationQueue.enqueue(input);
     },
   );
+  const evaluationConfiguration = evaluatorConfiguration(environment);
+  const evaluationService = new WritingEvaluationService(
+    activeDatabase,
+    writingEvaluator ?? defaultWritingEvaluator(environment),
+    evaluationConfiguration,
+    server.log,
+  );
   server.get("/v1/health", async () => ({ status: "ok" as const }));
   server.get("/v1/model-status", async () => {
     if (
@@ -172,6 +245,8 @@ export function buildServer({
     reconciliationQueue,
     criticBroker,
   );
+  registerWritingRubricRoutes(server, activeDatabase);
+  registerWritingEvaluationRoutes(server, evaluationService);
   registerCompletionRoutes(
     server,
     activeDatabase,
@@ -202,7 +277,12 @@ export function buildServer({
     provider: activeModel.critic.adapter.providerId,
     model: activeModel.critic.model,
   });
-  registerLocalDataRoutes(server, activeDatabase, activeTrainingTraceWriter);
+  registerLocalDataRoutes(
+    server,
+    activeDatabase,
+    activeTrainingTraceWriter,
+    evaluationService,
+  );
   registerCriticMcpRoute(
     server,
     activeCriticAgentBroker,
@@ -211,6 +291,7 @@ export function buildServer({
   );
 
   server.addHook("onClose", async () => {
+    evaluationService.close();
     reconciliationQueue.close();
     activeCriticAgentBroker.close();
     activeIssueChatAgentBroker.close();

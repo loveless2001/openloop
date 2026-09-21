@@ -15,6 +15,9 @@ describe("model environment", () => {
     expect(environment.CRITIC_AGENT).toBe("codex");
     expect(environment.CRITIC_AGENT_COMMAND).toBe("");
     expect(environment.CRITIC_AGENT_JOB_TIMEOUT_MS).toBe(300_000);
+    expect(environment.EVALUATOR_PROVIDER).toBe("mock");
+    expect(environment.TYPESAFE_API_KEY).toBe("");
+    expect(environment.JEV_MODEL).toBe("jev-1.13.0");
     expect(environment.CAPTURE_TRAINING_TRACES).toBe(false);
   });
 
@@ -43,9 +46,13 @@ describe("model environment", () => {
     const environment = readEnvironment({
       COMPLETION_PROVIDER: "mock",
       CRITIC_PROVIDER: "mock",
+      EVALUATOR_PROVIDER: "typesafe",
+      TYPESAFE_API_KEY: "test-typesafe-key",
     });
     expect(environment.COMPLETION_PROVIDER).toBe("mock");
     expect(environment.CRITIC_PROVIDER).toBe("mock");
+    expect(environment.EVALUATOR_PROVIDER).toBe("typesafe");
+    expect(environment.TYPESAFE_API_KEY).toBe("test-typesafe-key");
   });
 
   it("allows the CLI agent only for the critic role", () => {

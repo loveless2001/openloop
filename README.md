@@ -13,6 +13,10 @@ This repository implements the Phase 0–6 MVP in
 issue ledger, anchor reconciliation, deterministic resurfacing, guarded Markdown export, and local
 privacy controls.
 
+It also includes the separate J0–J2 writing-rubric evaluation slice described in
+[`docs/JEV-EVALUATION.md`](docs/JEV-EVALUATION.md). It supports both a clearly labeled local mock
+and explicit native Jev evaluation; it does not include the J3 research workflow.
+
 The implemented vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
 versions; local SQLite persistence; streamed ghost-text completion; queued changed-block critique;
@@ -61,6 +65,28 @@ Starting OpenLoop owns the remaining runtime lifecycle. Server boot probes Ollam
 `ollama serve` when the configured local endpoint is unavailable, verifies the model, warms it, and
 only then exposes the API as ready. Shutdown stops Ollama only when OpenLoop started that process;
 an Ollama instance that was already running is left untouched.
+
+## Writing rubric evaluation (J0–J2)
+
+Choose **Evaluate document** in the header, or highlight non-empty text and choose **Evaluate** in
+the selection toolbar. The Evaluation tab shares the right workspace with Open loops, so switching
+views does not replace the critic, issue selection, or issue chat state. Create a blank rubric or an
+editable starter, prepare the snapshot, review the exact target/context and complete request JSON,
+then evaluate. Results are per criterion and persist across refresh; old results are labeled when
+the draft or rubric has changed.
+
+J1 defaults to `EVALUATOR_PROVIDER=mock` and labels every result **Mock — UI test only**. Its fixed
+fixtures exercise UI states and say nothing about writing quality. The mock runs locally and needs
+no key. Evaluation is separately configured from autocomplete and criticism and never creates or
+resolves issues, edits prose, or enters the training-trace path.
+
+`EVALUATOR_PROVIDER=disabled` turns the feature off. To use Jev, append the variables from
+`.env.jev.example` to the existing `.env` and set the server-only `TYPESAFE_API_KEY`. Every remote
+submission requires reviewing the compiled payload and confirming its destination; the adapter
+makes one native `/v1/systemone` attempt with no silent mock fallback. `pnpm test:jev-live` performs
+one synthetic, persisted-through-the-service smoke evaluation and prints only sanitized provenance
+and result metadata. See [`docs/JEV-EVALUATION.md`](docs/JEV-EVALUATION.md) for the transport and
+remaining boundary.
 
 ## Inline completion
 
@@ -191,8 +217,9 @@ explicitly export anyway. The server enforces the same guard and serializes cano
 the `.md` contains document content only. Export events store version and issue counts, never text.
 
 Settings includes a confirmed **Delete local data** action. It transactionally clears documents,
-issues, event history, issue chats, model-run metadata, export events, and preference weights, then
-removes optional training traces plus the OpenLoop browser profile and current-document pointer.
+issues, event history, issue chats, writing rubrics and evaluation snapshots, model-run metadata,
+export events, and preference weights, then removes optional training traces plus the OpenLoop
+browser profile and current-document pointer.
 
 ## Critic and issue ledger
 
@@ -254,6 +281,11 @@ preference updates, Automerge cursor/branch behavior, MCP bearer and lease enfor
 routing, stale-result rejection, and gutter rendering. Three Playwright tests cover focused
 selection critique, persisted issue chat, and the complete completion → Later → same-ID resurfacing
 → revision → resolved-history → Markdown-export scenario.
+
+The J1 suites additionally cover rubric validation/revision conflicts, nested exact-text extraction,
+UTF-16 selection offsets, request compilation/display gates, mock fixture responses, preview/hash
+checks, idempotency, queue bounds, cancellation, restart interruption, persisted historical results,
+and deletion without late-result resurrection.
 
 ## Workspace
 

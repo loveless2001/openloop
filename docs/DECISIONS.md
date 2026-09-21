@@ -264,3 +264,19 @@ export events added after the baseline specification. A failure at any database 
 entire transaction back. After that commit, the server removes the configured optional training
 trace; browser settings and the current-document pointer are removed only after the server confirms
 success. This keeps the visible UI state aligned with the privacy operation.
+
+## 029 — Keep rubric evaluation snapshot-bound and separate from the critic
+
+J0/J1 adds `WritingEvaluator` beside the existing model adapter rather than extending completion,
+critique, reconciliation, provider enums, MCP permissions, or issue state. The server reconstructs
+`evaluation-text.v1` from saved TipTap JSON, verifies selection fragments and UTF-16 offsets, and
+hashes the complete rubric/provider/compiler identity. Preview and submit use the same compiler;
+submission rechecks the reviewed hash and persists an immutable rubric/source snapshot.
+
+The in-process evaluator has one active and two queued jobs globally. Request IDs are idempotent,
+restart leaves unfinished work interrupted rather than resent, and terminal/deleted rows cannot be
+revived by late results. The J1 mock is fixed fixture plumbing labeled **Mock — UI test only**; it is
+not a writing heuristic. J2 uses a separate native-fetch TypeSafe adapter with one attempt, explicit
+remote confirmation, validated native responses, and no mock fallback. Feedback/history export is
+deferred to J3. This preserves the document and claim ledger as separate authorities while making
+stale evaluation provenance explicit.

@@ -27,6 +27,12 @@ import {
   reviewExport,
   tipTapJsonToMarkdown,
 } from "../export.js";
+import { WritingEvaluationPreparationError } from "@openloop/core";
+import {
+  WritingRubricNotFoundError,
+  WritingRubricVersionConflictError,
+} from "../writing-rubrics.js";
+import { WritingEvaluationServiceError } from "../writing-evaluation-service.js";
 
 const DocumentParamsSchema = z.object({ documentId: z.uuid() });
 const ExportQuerySchema = z.object({ force: z.literal("true").optional() });
@@ -155,6 +161,60 @@ export function registerDocumentRoutes(
           message: error.message,
           requestId: request.id,
           details: { currentVersion: error.currentVersion },
+        },
+      });
+    }
+    if (error instanceof WritingRubricNotFoundError) {
+      return reply.code(404).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          requestId: request.id,
+        },
+      });
+    }
+    if (error instanceof WritingRubricVersionConflictError) {
+      return reply.code(409).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          requestId: request.id,
+          details: { currentRevision: error.currentRevision },
+        },
+      });
+    }
+    if (error instanceof WritingEvaluationPreparationError) {
+      const status =
+        error.code === "EVALUATION_TOO_LARGE"
+          ? 413
+          : error.code.endsWith("CONFLICT") ||
+              error.code === "EVALUATION_PREVIEW_STALE"
+            ? 409
+            : 422;
+      return reply.code(status).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          requestId: request.id,
+          ...(error.details ? { details: error.details } : {}),
+        },
+      });
+    }
+    if (error instanceof WritingEvaluationServiceError) {
+      const status =
+        error.code === "WRITING_EVALUATION_NOT_FOUND"
+          ? 404
+          : error.code === "EVALUATION_BUSY"
+            ? 429
+            : error.code === "EVALUATOR_NOT_CONFIGURED"
+              ? 503
+              : 409;
+      return reply.code(status).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          requestId: request.id,
+          ...(error.details ? { details: error.details } : {}),
         },
       });
     }

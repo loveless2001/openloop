@@ -54,4 +54,60 @@ describe("critic selection", () => {
     expect(getCriticSelection(editor)).toBeNull();
     editor.destroy();
   });
+
+  it("captures nested quote and list text once with UTF-16 offsets", () => {
+    const quoteId = "11111111-1111-4111-8111-111111111111";
+    const quoteParagraphId = "22222222-2222-4222-8222-222222222222";
+    const listParagraphId = "33333333-3333-4333-8333-333333333333";
+    const editor = new Editor({
+      extensions: [StarterKit, StableNodeId],
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "blockquote",
+            attrs: { nodeId: quoteId },
+            content: [
+              {
+                type: "paragraph",
+                attrs: { nodeId: quoteParagraphId },
+                content: [{ type: "text", text: "😀 Việt" }],
+              },
+            ],
+          },
+          {
+            type: "bulletList",
+            content: [
+              {
+                type: "listItem",
+                content: [
+                  {
+                    type: "paragraph",
+                    attrs: { nodeId: listParagraphId },
+                    content: [{ type: "text", text: "next" }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    editor.commands.setTextSelection({
+      from: 2,
+      to: editor.state.doc.content.size,
+    });
+    const selection = getCriticSelection(editor);
+    expect(selection?.blocks.map((block) => block.nodeId)).toEqual([
+      quoteParagraphId,
+      listParagraphId,
+    ]);
+    expect(selection?.text).toBe("😀 Việt\nnext");
+    expect(selection?.blocks[0]).toMatchObject({
+      text: "😀 Việt",
+      selectionStart: 0,
+      selectionEnd: 7,
+    });
+    editor.destroy();
+  });
 });

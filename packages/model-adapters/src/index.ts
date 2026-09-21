@@ -1,5 +1,13 @@
 export { ModelAdapterError, type ModelErrorCode } from "./model-error.js";
 export { MockModelAdapter } from "./mock-adapter.js";
+export { MockWritingEvaluator } from "./mock-writing-evaluator.js";
+export type { WritingEvaluator } from "./writing-evaluator.js";
+export {
+  TypeSafeWritingEvaluator,
+  WritingEvaluatorError,
+  type TypeSafeWritingEvaluatorConfig,
+  type WritingEvaluatorErrorCode,
+} from "./typesafe-writing-evaluator.js";
 export {
   OLLAMA_CAUSAL_PROMPT_VERSION,
   OllamaModelAdapter,

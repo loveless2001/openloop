@@ -98,7 +98,7 @@ describe("Phase 0/1 server", () => {
 
     const tables = database.sqlite
       .prepare(
-        "select name from sqlite_master where type = 'table' and name in ('documents', 'document_events', 'issues', 'issue_events', 'issue_chat_threads', 'issue_chat_messages', 'model_runs', 'preference_weights') order by name",
+        "select name from sqlite_master where type = 'table' and name in ('documents', 'document_events', 'issues', 'issue_events', 'issue_chat_threads', 'issue_chat_messages', 'model_runs', 'preference_weights', 'writing_evaluation_runs', 'writing_rubrics') order by name",
       )
       .all() as Array<{ name: string }>;
     expect(tables.map(({ name }) => name)).toEqual([
@@ -110,6 +110,8 @@ describe("Phase 0/1 server", () => {
       "issues",
       "model_runs",
       "preference_weights",
+      "writing_evaluation_runs",
+      "writing_rubrics",
     ]);
 
     const indexes = database.sqlite
@@ -126,6 +128,8 @@ describe("Phase 0/1 server", () => {
       "issues_document_dedupe_idx",
       "issues_document_status_idx",
       "issues_document_updated_idx",
+      "writing_evaluation_runs_document_created_idx",
+      "writing_evaluation_runs_request_id_idx",
     ]);
   });
 

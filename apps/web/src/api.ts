@@ -27,6 +27,21 @@ import {
   type ModelStatusResponse,
   type ReconcileRequest,
   type ResurfaceRequest,
+  CreateWritingRubricRequestSchema,
+  EvaluationPreviewSchema,
+  EvaluatorStatusResponseSchema,
+  WritingEvaluationListResponseSchema,
+  WritingEvaluationRunSchema,
+  WritingRubricListResponseSchema,
+  WritingRubricSchema,
+  type CreateEvaluationRequest,
+  type EvaluationIntent,
+  type EvaluationPreview,
+  type EvaluatorStatusResponse,
+  type WritingEvaluationRun,
+  type WritingEvaluationRunSummary,
+  type WritingRubric,
+  type WritingRubricContent,
 } from "@openloop/shared";
 
 export class ApiClientError extends Error {
@@ -42,6 +57,94 @@ export class ApiClientError extends Error {
 export async function loadModelStatus(): Promise<ModelStatusResponse> {
   const response = await fetch("/v1/model-status");
   return ModelStatusResponseSchema.parse(await parseResponse(response));
+}
+
+export async function loadEvaluatorStatus(): Promise<EvaluatorStatusResponse> {
+  const response = await fetch("/v1/evaluator-status");
+  return EvaluatorStatusResponseSchema.parse(await parseResponse(response));
+}
+
+export async function loadWritingRubrics(): Promise<WritingRubric[]> {
+  const response = await fetch("/v1/writing-rubrics");
+  return WritingRubricListResponseSchema.parse(await parseResponse(response))
+    .rubrics;
+}
+
+export async function createWritingRubric(
+  input: WritingRubricContent,
+): Promise<WritingRubric> {
+  const response = await fetch("/v1/writing-rubrics", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(CreateWritingRubricRequestSchema.parse(input)),
+  });
+  return WritingRubricSchema.parse(await parseResponse(response));
+}
+
+export async function updateWritingRubric(
+  rubricId: string,
+  input: WritingRubricContent & { baseRevision: number },
+): Promise<WritingRubric> {
+  const response = await fetch(`/v1/writing-rubrics/${rubricId}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return WritingRubricSchema.parse(await parseResponse(response));
+}
+
+export async function previewWritingEvaluation(
+  documentId: string,
+  intent: EvaluationIntent,
+): Promise<EvaluationPreview> {
+  const response = await fetch(
+    `/v1/documents/${documentId}/evaluations/preview`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(intent),
+    },
+  );
+  return EvaluationPreviewSchema.parse(await parseResponse(response));
+}
+
+export async function submitWritingEvaluation(
+  documentId: string,
+  request: CreateEvaluationRequest,
+): Promise<WritingEvaluationRun> {
+  const response = await fetch(`/v1/documents/${documentId}/evaluations`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return WritingEvaluationRunSchema.parse(await parseResponse(response));
+}
+
+export async function listWritingEvaluations(
+  documentId: string,
+): Promise<WritingEvaluationRunSummary[]> {
+  const response = await fetch(
+    `/v1/documents/${documentId}/evaluations?limit=20`,
+  );
+  return WritingEvaluationListResponseSchema.parse(
+    await parseResponse(response),
+  ).runs;
+}
+
+export async function loadWritingEvaluation(
+  runId: string,
+): Promise<WritingEvaluationRun> {
+  const response = await fetch(`/v1/evaluations/${runId}`);
+  return WritingEvaluationRunSchema.parse(await parseResponse(response));
+}
+
+export async function cancelWritingEvaluation(
+  runId: string,
+): Promise<WritingEvaluationRun> {
+  const response = await fetch(`/v1/evaluations/${runId}/cancel`, {
+    method: "POST",
+  });
+  return WritingEvaluationRunSchema.parse(await parseResponse(response));
 }
 
 export async function loadCriticAgentStatus(): Promise<CriticAgentStatusResponse> {

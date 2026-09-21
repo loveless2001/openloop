@@ -528,6 +528,355 @@ textarea {
   overflow: hidden;
 }
 
+.workspace-side {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-left: 1px solid #d5d0c5;
+  background: #f7f4ed;
+}
+
+.workspace-side > .issue-panel,
+.workspace-side > .evaluation-panel {
+  min-height: 0;
+  flex: 1;
+  border-left: 0;
+}
+
+.workspace-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #ded8cd;
+}
+
+.workspace-tabs button {
+  padding: 8px;
+  border: 1px solid #d5d0c5;
+  border-radius: 7px;
+  color: #6e675e;
+  background: #ebe7df;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workspace-tabs button:hover,
+.workspace-tabs button:focus-visible {
+  border-color: #aebfb6;
+  color: #315d50;
+  background: #f4f1ea;
+  outline: none;
+}
+
+.workspace-tabs button[aria-selected="true"] {
+  border-color: #9dbbad;
+  color: #173c32;
+  background: #edf4f0;
+  box-shadow: 0 1px 2px rgb(35 77 65 / 8%);
+}
+
+.evaluation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px 36px;
+  overflow-y: auto;
+  background: #f7f4ed;
+}
+
+.evaluation-panel-heading h2 {
+  margin: 4px 0 3px;
+  color: #173c32;
+  font-family: Georgia, serif;
+  font-size: 24px;
+}
+
+.evaluation-panel-heading > span,
+.evaluator-status span,
+.evaluation-result-provenance span,
+.evaluation-run-state span {
+  display: block;
+  color: #756e65;
+  font-size: 11px;
+}
+
+.evaluation-controls,
+.evaluation-preview,
+.evaluation-results,
+.rubric-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.evaluation-controls label,
+.rubric-editor > label,
+.rubric-criterion-editor > label,
+.rubric-level-row label {
+  display: grid;
+  gap: 5px;
+  color: #5f5850;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.evaluation-controls select,
+.rubric-editor input,
+.rubric-editor textarea {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid #cec6ba;
+  border-radius: 6px;
+  color: #39342e;
+  background: #fffdf8;
+  font-size: 12px;
+}
+
+.rubric-editor textarea {
+  resize: vertical;
+}
+
+.rubric-picker-actions,
+.rubric-editor-actions,
+.criterion-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rubric-picker-actions button,
+.rubric-editor-actions button,
+.criterion-order-actions button,
+.evaluation-run-state button {
+  padding: 6px 8px;
+  border: 1px solid #c8beb1;
+  border-radius: 5px;
+  color: #49423b;
+  background: #fffdf8;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rubric-editor-actions > span {
+  flex: 1;
+}
+
+.rubric-summary,
+.evaluator-status,
+.evaluation-run-state,
+.evaluation-result-provenance {
+  padding: 9px 10px;
+  border: 1px solid #d8d1c5;
+  border-radius: 7px;
+  background: #fffdf8;
+}
+
+.rubric-summary p {
+  margin: 3px 0;
+  color: #625b53;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.context-choice,
+.rubric-criterion-editor {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d6cec2;
+  border-radius: 7px;
+}
+
+.context-choice legend,
+.rubric-criterion-editor legend {
+  color: #534d46;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.context-choice label,
+.rubric-scope-checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  color: #625b53;
+  font-size: 11px;
+}
+
+.rubric-scope-checks {
+  display: flex;
+  gap: 12px;
+}
+
+.rubric-help,
+.evaluation-warning,
+.evaluation-error {
+  margin: 0;
+  color: #76532e;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.evaluation-error {
+  padding: 9px;
+  border: 1px solid #d7a49d;
+  border-radius: 6px;
+  color: #873c34;
+  background: #fff1ee;
+}
+
+.evaluation-preview,
+.evaluation-criterion-card {
+  padding: 12px;
+  border: 1px solid #d5cdc0;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.evaluation-preview > div,
+.evaluation-criterion-card > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.evaluation-preview h3,
+.evaluation-criterion-card h3 {
+  margin: 0;
+  color: #2d2924;
+  font-family: Georgia, serif;
+  font-size: 15px;
+}
+
+.evaluation-preview span,
+.evaluation-preview small {
+  color: #776f66;
+  font-size: 9px;
+}
+
+.evaluation-preview pre,
+.historical-snapshot pre {
+  max-height: 210px;
+  margin: 7px 0 0;
+  padding: 9px;
+  overflow: auto;
+  border-radius: 5px;
+  color: #453f38;
+  background: #f1ede5;
+  font:
+    11px/1.5 "SFMono-Regular",
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+}
+
+.remote-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #6e481f;
+  font-size: 11px;
+}
+
+.evaluation-run-state {
+  display: grid;
+  gap: 4px;
+}
+
+.evaluation-run-state[data-status="failed"] {
+  border-color: #d7a49d;
+  background: #fff1ee;
+}
+
+.evaluation-run-state p {
+  margin: 4px 0 0;
+  color: #873c34;
+  font-size: 11px;
+}
+
+.evaluation-result-provenance {
+  border-color: #b9cfc5;
+  background: #eef7f3;
+}
+
+.evaluation-criterion-card {
+  display: grid;
+  gap: 7px;
+}
+
+.evaluation-criterion-card > div > strong {
+  color: #315d50;
+  font-size: 11px;
+}
+
+.evaluation-criterion-card > p {
+  margin: 0;
+  color: #625b53;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.saved-level-description {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-left: 3px solid #7b9b8d;
+  background: #f0f5f2;
+}
+
+.saved-level-description span {
+  color: #6f796f;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.evaluation-criterion-card details,
+.historical-snapshot {
+  color: #6e675e;
+  font-size: 10px;
+}
+
+.evaluation-levels {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evaluation-levels li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.evaluation-levels li > span {
+  display: grid;
+  gap: 2px;
+}
+
+.evaluation-levels small {
+  color: #7a736a;
+  line-height: 1.35;
+}
+
+.rubric-criterion-editor,
+.rubric-level-row {
+  display: grid;
+  gap: 8px;
+}
+
+.rubric-level-row {
+  padding-top: 8px;
+  border-top: 1px solid #e2dcd2;
+}
+
 .issue-filters {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

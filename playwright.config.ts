@@ -14,10 +14,11 @@ export default defineConfig({
     env: {
       COMPLETION_PROVIDER: "mock",
       CRITIC_PROVIDER: "mock",
+      EVALUATOR_PROVIDER: "mock",
       DATABASE_URL: `file:${join(tmpdir(), "openloop-playwright.db")}`,
     },
     reuseExistingServer: true,
     timeout: 120_000,
-    url: `http://127.0.0.1:${webPort}`,
+    url: "http://127.0.0.1:8787/v1/health",
   },
 });
