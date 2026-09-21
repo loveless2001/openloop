@@ -63,12 +63,14 @@ export function useDocumentSession(appSettings: AppSettings) {
   const saveInFlightRef = useRef(false);
   const saveCompletionRef = useRef<Promise<void> | null>(null);
   const conflictRef = useRef(false);
+  const lastSaveErrorRef = useRef<unknown>(undefined);
   const remoteDocumentRef = useRef<DocumentRecord | null>(null);
   const flushRef = useRef<() => Promise<void>>(async () => undefined);
 
   const activateDocument = useCallback((nextDocument: DocumentRecord) => {
     window.localStorage.setItem(DOCUMENT_STORAGE_KEY, nextDocument.id);
     conflictRef.current = false;
+    lastSaveErrorRef.current = undefined;
     remoteDocumentRef.current = null;
     pendingRef.current = null;
     documentRef.current = nextDocument;
@@ -188,6 +190,7 @@ export function useDocumentSession(appSettings: AppSettings) {
         changeBatch: submitted,
       });
       documentRef.current = saved;
+      lastSaveErrorRef.current = undefined;
       versionRef.current = saved.version;
       setVersion(saved.version);
       if (pendingRef.current) {
@@ -199,6 +202,7 @@ export function useDocumentSession(appSettings: AppSettings) {
         setMessage("Saved locally");
       }
     } catch (error) {
+      lastSaveErrorRef.current = error;
       pendingRef.current = mergeChangeBatches(
         submitted,
         pendingRef.current ?? submitted,
@@ -284,6 +288,7 @@ export function useDocumentSession(appSettings: AppSettings) {
     const latest = remoteDocumentRef.current;
     if (!latest) return;
     conflictRef.current = false;
+    lastSaveErrorRef.current = undefined;
     remoteDocumentRef.current = null;
     pendingRef.current = null;
     documentRef.current = latest;
@@ -336,6 +341,30 @@ export function useDocumentSession(appSettings: AppSettings) {
     return versionRef.current;
   }, [reportTransientStatus]);
 
+  const saveForEvaluation = useCallback(async () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    await flushRef.current();
+    if (conflictRef.current) {
+      throw new Error(
+        "A newer saved version conflicts with this draft. Resolve the save conflict, then prepare the evaluation again.",
+      );
+    }
+    if (lastSaveErrorRef.current) {
+      throw new Error(
+        `${
+          lastSaveErrorRef.current instanceof Error
+            ? lastSaveErrorRef.current.message
+            : "The draft could not be saved."
+        } Your draft is still available; check the connection and retry preparation.`,
+      );
+    }
+    reportTransientStatus("Saved locally", 1_500);
+    return versionRef.current;
+  }, [reportTransientStatus]);
+
   return {
     document,
     createFreshDocument,
@@ -344,6 +373,7 @@ export function useDocumentSession(appSettings: AppSettings) {
     reportTransientStatus,
     requestCritic: critic.request,
     reloadSavedVersion,
+    saveForEvaluation,
     saveLocalDraftAfterConflict,
     saveNow,
     status,

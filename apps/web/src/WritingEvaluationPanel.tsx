@@ -5,10 +5,14 @@ import type {
   WritingLanguageHint,
   WritingRubric,
 } from "@openloop/shared";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { EditorCriticSelection } from "./editor/critic-selection.js";
-import { useWritingEvaluation } from "./use-writing-evaluation.js";
+import {
+  type EvaluationPreparationIdentity,
+  sameEvaluationPreparationIdentity,
+  useWritingEvaluation,
+} from "./use-writing-evaluation.js";
 import {
   blankRubric,
   starterRubric,
@@ -22,6 +26,12 @@ export type WritingEvaluationTarget =
       generation: number;
       selection: EditorCriticSelection;
     };
+
+function evaluationTargetKey(target: WritingEvaluationTarget): string {
+  return target.kind === "document"
+    ? "document"
+    : JSON.stringify(target.selection.blocks);
+}
 
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
@@ -114,7 +124,12 @@ export function WritingEvaluationPanel(props: {
   currentVersion: number;
   documentId: string;
   draftChanged: boolean;
-  onPrepareVersion: (capturedGeneration: number) => Promise<number>;
+  editorGeneration: number;
+  onPrepareVersion: (
+    documentId: string,
+    capturedGeneration: number,
+    targetKind: WritingEvaluationTarget["kind"],
+  ) => Promise<number>;
   target: WritingEvaluationTarget;
 }) {
   const evaluation = useWritingEvaluation(props.documentId);
@@ -122,7 +137,6 @@ export function WritingEvaluationPanel(props: {
   const [contextMode, setContextMode] = useState<"none" | "nearby">("none");
   const [languageHint, setLanguageHint] =
     useState<WritingLanguageHint>("unspecified");
-  const [preparedIntent, setPreparedIntent] = useState<EvaluationIntent>();
   const [remoteConfirmed, setRemoteConfirmed] = useState(false);
   const [editing, setEditing] = useState<
     | { content: ReturnType<typeof blankRubric>; existing?: WritingRubric }
@@ -135,22 +149,54 @@ export function WritingEvaluationPanel(props: {
     }
   }, [evaluation.rubrics, selectedRubricId]);
 
-  useEffect(() => {
-    evaluation.invalidatePreview();
-    setPreparedIntent(undefined);
-    setRemoteConfirmed(false);
-  }, [
-    contextMode,
-    languageHint,
-    props.currentVersion,
-    props.draftChanged,
-    props.target,
-    selectedRubricId,
-  ]);
-
   const selectedRubric = evaluation.rubrics.find(
     (rubric) => rubric.id === selectedRubricId,
   );
+  const targetKey = evaluationTargetKey(props.target);
+  const currentInputRef = useRef<EvaluationPreparationIdentity | null>(null);
+  currentInputRef.current = selectedRubric
+    ? {
+        contextMode,
+        documentId: props.documentId,
+        editorGeneration: props.editorGeneration,
+        languageHint,
+        rubricId: selectedRubric.id,
+        rubricRevision: selectedRubric.revision,
+        targetKey,
+        targetKind: props.target.kind,
+      }
+    : null;
+  const preparingRef = useRef(evaluation.preparing);
+  preparingRef.current = evaluation.preparing;
+  const previousGenerationRef = useRef(props.editorGeneration);
+
+  useEffect(() => {
+    const generationChanged =
+      previousGenerationRef.current !== props.editorGeneration;
+    previousGenerationRef.current = props.editorGeneration;
+    evaluation.invalidatePrepared(
+      generationChanged && preparingRef.current
+        ? props.target.kind === "selection"
+          ? "The draft changed after this selection was captured. Select the text again before preparing an evaluation."
+          : "The draft changed during preparation. Review the latest text and prepare the preview again."
+        : undefined,
+    );
+    setRemoteConfirmed(false);
+  }, [
+    contextMode,
+    evaluation.invalidatePrepared,
+    languageHint,
+    props.documentId,
+    props.editorGeneration,
+    props.target.kind,
+    selectedRubric?.id,
+    selectedRubric?.revision,
+    targetKey,
+  ]);
+
+  useEffect(() => {
+    setRemoteConfirmed(false);
+  }, [evaluation.prepared?.preview.inputHash]);
   const result = evaluation.resultRun;
   const currentRubricRevision = result
     ? evaluation.rubrics.find(
@@ -178,29 +224,56 @@ export function WritingEvaluationPanel(props: {
 
   const prepare = async () => {
     if (!selectedRubric) return;
-    const documentVersion = await props.onPrepareVersion(
-      props.target.generation,
-    );
-    const intent: EvaluationIntent = {
-      documentVersion,
+    const target = structuredClone(props.target);
+    const editorGeneration =
+      target.kind === "document" ? props.editorGeneration : target.generation;
+    const identity = {
+      contextMode,
+      documentId: props.documentId,
+      editorGeneration,
+      languageHint,
       rubricId: selectedRubric.id,
       rubricRevision: selectedRubric.revision,
-      scope:
-        props.target.kind === "document"
-          ? { kind: "document" }
-          : {
-              kind: "selection",
-              fragments: props.target.selection.blocks.map((block) => ({
-                ...block,
-                selectionStart: block.selectionStart ?? 0,
-                selectionEnd: block.selectionEnd ?? block.text.length,
-              })),
-              contextMode,
-            },
-      languageHint,
-    };
-    await evaluation.prepare(intent);
-    setPreparedIntent(intent);
+      targetKey: evaluationTargetKey(target),
+      targetKind: target.kind,
+    } as const;
+    const isCurrent = () =>
+      currentInputRef.current !== null &&
+      sameEvaluationPreparationIdentity(currentInputRef.current, identity);
+    await evaluation.prepare({
+      identity,
+      isCurrent,
+      staleMessage:
+        target.kind === "selection"
+          ? "The draft changed after this selection was captured. Select the text again before preparing an evaluation."
+          : "The draft changed during preparation. Review the latest text and prepare the preview again.",
+      resolveIntent: async () => {
+        const documentVersion = await props.onPrepareVersion(
+          identity.documentId,
+          identity.editorGeneration,
+          identity.targetKind,
+        );
+        const intent: EvaluationIntent = {
+          documentVersion,
+          rubricId: identity.rubricId,
+          rubricRevision: identity.rubricRevision,
+          scope:
+            target.kind === "document"
+              ? { kind: "document" }
+              : {
+                  kind: "selection",
+                  fragments: target.selection.blocks.map((block) => ({
+                    ...block,
+                    selectionStart: block.selectionStart ?? 0,
+                    selectionEnd: block.selectionEnd ?? block.text.length,
+                  })),
+                  contextMode: identity.contextMode,
+                },
+          languageHint: identity.languageHint,
+        };
+        return intent;
+      },
+    });
   };
 
   return (
@@ -218,9 +291,13 @@ export function WritingEvaluationPanel(props: {
           initial={editing.content}
           onCancel={() => setEditing(undefined)}
           onSave={async (content, existing) => {
-            const saved = await evaluation.saveRubric(content, existing);
-            setSelectedRubricId(saved.id);
-            setEditing(undefined);
+            try {
+              const saved = await evaluation.saveRubric(content, existing);
+              setSelectedRubricId(saved.id);
+              setEditing(undefined);
+            } catch {
+              // The hook keeps the editor open and exposes the actionable error.
+            }
           }}
         />
       ) : (
@@ -336,55 +413,66 @@ export function WritingEvaluationPanel(props: {
             <button
               className="primary-button"
               disabled={!selectedRubric || evaluation.busy}
-              onClick={() => void prepare()}
+              onClick={() => {
+                void prepare();
+              }}
               type="button"
             >
-              {evaluation.busy ? "Preparing…" : "Prepare preview"}
+              {evaluation.preparing ? "Preparing…" : "Prepare preview"}
             </button>
           </section>
 
-          {evaluation.preview && preparedIntent ? (
+          {evaluation.prepared ? (
             <section className="evaluation-preview">
               <div>
                 <h3>Reviewed snapshot</h3>
                 <span>
-                  {evaluation.preview.byteCount.toLocaleString()} /{" "}
-                  {evaluation.preview.byteLimit.toLocaleString()} UTF-8 bytes
+                  {evaluation.prepared.preview.byteCount.toLocaleString()} /{" "}
+                  {evaluation.prepared.preview.byteLimit.toLocaleString()} UTF-8
+                  bytes
                 </span>
               </div>
-              {evaluation.preview.snapshot.context.before ? (
+              {evaluation.prepared.preview.snapshot.context.before ? (
                 <details>
                   <summary>
                     Context before
-                    {evaluation.preview.snapshot.context.beforeClipped
+                    {evaluation.prepared.preview.snapshot.context.beforeClipped
                       ? " · clipped"
                       : ""}
                   </summary>
-                  <pre>{evaluation.preview.snapshot.context.before}</pre>
+                  <pre>
+                    {evaluation.prepared.preview.snapshot.context.before}
+                  </pre>
                 </details>
               ) : null}
               <details open>
                 <summary>Exact evaluation target</summary>
-                <pre>{evaluation.preview.snapshot.targetText}</pre>
+                <pre>{evaluation.prepared.preview.snapshot.targetText}</pre>
               </details>
-              {evaluation.preview.snapshot.context.after ? (
+              {evaluation.prepared.preview.snapshot.context.after ? (
                 <details>
                   <summary>
                     Context after
-                    {evaluation.preview.snapshot.context.afterClipped
+                    {evaluation.prepared.preview.snapshot.context.afterClipped
                       ? " · clipped"
                       : ""}
                   </summary>
-                  <pre>{evaluation.preview.snapshot.context.after}</pre>
+                  <pre>
+                    {evaluation.prepared.preview.snapshot.context.after}
+                  </pre>
                 </details>
               ) : null}
               <details>
                 <summary>Exact prepared request JSON</summary>
                 <pre>
-                  {JSON.stringify(evaluation.preview.compiledRequest, null, 2)}
+                  {JSON.stringify(
+                    evaluation.prepared.preview.compiledRequest,
+                    null,
+                    2,
+                  )}
                 </pre>
               </details>
-              <small>Input hash {evaluation.preview.inputHash}</small>
+              <small>Input hash {evaluation.prepared.preview.inputHash}</small>
               {evaluation.evaluatorStatus?.mode === "remote" ? (
                 <label className="remote-confirmation">
                   <input
@@ -403,19 +491,16 @@ export function WritingEvaluationPanel(props: {
                 disabled={
                   evaluation.busy ||
                   running ||
+                  evaluation.retrySubmission ||
                   (evaluation.evaluatorStatus?.mode === "remote" &&
                     !remoteConfirmed)
                 }
-                onClick={() =>
-                  void evaluation.submit({
-                    ...preparedIntent,
-                    requestId: crypto.randomUUID(),
-                    expectedInputHash: evaluation.preview?.inputHash ?? "",
-                    remoteSubmissionConfirmed:
-                      evaluation.evaluatorStatus?.mode !== "remote" ||
+                onClick={() => {
+                  void evaluation.submitPrepared(
+                    evaluation.evaluatorStatus?.mode !== "remote" ||
                       remoteConfirmed,
-                  })
-                }
+                  );
+                }}
                 type="button"
               >
                 Evaluate
@@ -429,6 +514,27 @@ export function WritingEvaluationPanel(props: {
         <p className="evaluation-error" role="alert">
           {evaluation.error}
         </p>
+      ) : null}
+      {evaluation.retrySubmission ? (
+        <div className="rubric-picker-actions">
+          <button
+            className="primary-button"
+            disabled={evaluation.busy}
+            onClick={() => {
+              void evaluation.retry();
+            }}
+            type="button"
+          >
+            Retry submission
+          </button>
+          <button
+            disabled={evaluation.busy}
+            onClick={evaluation.discardSubmissionRecovery}
+            type="button"
+          >
+            Discard recovery and prepare a new run
+          </button>
+        </div>
       ) : null}
       {requestedRun ? (
         <section
@@ -446,7 +552,9 @@ export function WritingEvaluationPanel(props: {
           {running ? (
             <button
               disabled={evaluation.busy}
-              onClick={() => void evaluation.cancel()}
+              onClick={() => {
+                void evaluation.cancel();
+              }}
               type="button"
             >
               Cancel

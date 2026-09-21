@@ -110,4 +110,84 @@ describe("critic selection", () => {
     });
     editor.destroy();
   });
+
+  it("preserves empty paragraph boundaries between partial first and last blocks", () => {
+    const firstId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const emptyId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const lastId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const editor = new Editor({
+      extensions: [StarterKit, StableNodeId],
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            attrs: { nodeId: firstId },
+            content: [{ type: "text", text: "alpha" }],
+          },
+          { type: "paragraph", attrs: { nodeId: emptyId } },
+          {
+            type: "paragraph",
+            attrs: { nodeId: lastId },
+            content: [{ type: "text", text: "bravo" }],
+          },
+        ],
+      },
+    });
+    let firstPosition = -1;
+    let lastPosition = -1;
+    editor.state.doc.descendants((node, position) => {
+      if (node.attrs.nodeId === firstId) firstPosition = position;
+      if (node.attrs.nodeId === lastId) lastPosition = position;
+    });
+    editor.commands.setTextSelection({
+      from: firstPosition + 3,
+      to: lastPosition + 4,
+    });
+
+    const selection = getCriticSelection(editor);
+    expect(selection?.text).toBe("pha\n\nbra");
+    expect(selection?.blocks.map((block) => block.nodeId)).toEqual([
+      firstId,
+      lastId,
+    ]);
+    expect(selection?.blocks).toMatchObject([
+      { text: "pha", selectionStart: 2, selectionEnd: 5 },
+      { text: "bra", selectionStart: 0, selectionEnd: 3 },
+    ]);
+    editor.destroy();
+  });
+
+  it("keeps hard breaks, emoji, and combining marks in UTF-16 selection offsets", () => {
+    const nodeId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const editor = new Editor({
+      extensions: [StarterKit, StableNodeId],
+      content: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            attrs: { nodeId },
+            content: [
+              { type: "text", text: "😀 Vie\u0323\u0302t" },
+              { type: "hardBreak" },
+              { type: "text", text: "Nam" },
+            ],
+          },
+        ],
+      },
+    });
+    editor.commands.setTextSelection({
+      from: 1,
+      to: editor.state.doc.content.size - 1,
+    });
+
+    const selection = getCriticSelection(editor);
+    expect(selection?.text).toBe("😀 Vie\u0323\u0302t\nNam");
+    expect(selection?.blocks[0]).toMatchObject({
+      selectionStart: 0,
+      selectionEnd: "😀 Vie\u0323\u0302t\nNam".length,
+    });
+    editor.destroy();
+  });
 });

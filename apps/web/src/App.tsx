@@ -52,6 +52,7 @@ export function App() {
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [sidePanel, setSidePanel] = useState<"issues" | "evaluation">("issues");
+  const [editorGeneration, setEditorGeneration] = useState(0);
   const [evaluationTarget, setEvaluationTarget] =
     useState<WritingEvaluationTarget>({ kind: "document", generation: 0 });
   const [activeSelection, setActiveSelection] =
@@ -61,6 +62,8 @@ export function App() {
     selection: EditorCriticSelection;
     totalWordCount: number;
   } | null>(null);
+  const activeDocumentIdRef = useRef(session.document?.id);
+  activeDocumentIdRef.current = session.document?.id;
   const ledger = useIssueLedger({
     documentId: session.document?.id,
     documentVersion: session.version,
@@ -84,6 +87,7 @@ export function App() {
       batch: EditorChangeBatch,
     ) => {
       const generation = (resurfaceGenerationRef.current += 1);
+      setEditorGeneration(generation);
       lastEditorActivityAtRef.current = Date.now();
       session.queueEditorChange(content, plainText, batch);
       ledger.noteMeaningfulEdit(batch.changedBlocks);
@@ -357,16 +361,35 @@ export function App() {
   }, []);
 
   const prepareEvaluationVersion = useCallback(
-    async (capturedGeneration: number) => {
-      const savedVersion = await session.saveNow();
-      if (capturedGeneration !== resurfaceGenerationRef.current) {
+    async (
+      documentId: string,
+      capturedGeneration: number,
+      targetKind: WritingEvaluationTarget["kind"],
+    ) => {
+      const staleMessage =
+        targetKind === "selection"
+          ? "The draft changed after this selection was captured. Select the text again before preparing an evaluation."
+          : "The draft changed during preparation. Review the latest text and prepare the preview again.";
+      if (activeDocumentIdRef.current !== documentId) {
         throw new Error(
-          "The draft changed while saving. Capture the evaluation scope again.",
+          "The active document changed during preparation. Prepare the evaluation again in the current document.",
         );
+      }
+      if (capturedGeneration !== resurfaceGenerationRef.current) {
+        throw new Error(staleMessage);
+      }
+      const savedVersion = await session.saveForEvaluation();
+      if (activeDocumentIdRef.current !== documentId) {
+        throw new Error(
+          "The active document changed during preparation. Prepare the evaluation again in the current document.",
+        );
+      }
+      if (capturedGeneration !== resurfaceGenerationRef.current) {
+        throw new Error(staleMessage);
       }
       return savedVersion;
     },
-    [session.saveNow],
+    [session.saveForEvaluation],
   );
 
   if (!session.document) {
@@ -523,6 +546,7 @@ export function App() {
               currentVersion={session.version}
               documentId={session.document.id}
               draftChanged={session.status !== "saved"}
+              editorGeneration={editorGeneration}
               onPrepareVersion={prepareEvaluationVersion}
               target={evaluationTarget}
             />

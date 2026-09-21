@@ -169,10 +169,26 @@ function selectionSnapshot(
   blocks.forEach((block, index) => {
     if (block.nodeId) positions.set(block.nodeId, { block, index });
   });
-  let priorIndex = -1;
+  const fullText = blocks.map((block) => block.text).join("\n");
+  const blockStarts: number[] = [];
+  let offset = 0;
+  for (const block of blocks) {
+    blockStarts.push(offset);
+    offset += block.text.length + 1;
+  }
+
+  let prior:
+    | {
+        block: CanonicalBlock;
+        end: number;
+        index: number;
+      }
+    | undefined;
+  let rangeStart: number | undefined;
+  let rangeEnd: number | undefined;
   for (const fragment of fragments) {
     const canonical = positions.get(fragment.nodeId);
-    if (!canonical || canonical.index <= priorIndex) {
+    if (!canonical || (prior && canonical.index <= prior.index)) {
       throw new WritingEvaluationPreparationError(
         "EVALUATION_SCOPE_UNSUPPORTED",
         "The selection no longer maps to supported saved text in document order.",
@@ -183,17 +199,6 @@ function selectionSnapshot(
         "EVALUATION_SCOPE_UNSUPPORTED",
         "The selected node type does not match the saved document.",
         { nodeId: fragment.nodeId },
-      );
-    }
-    if (
-      priorIndex >= 0 &&
-      blocks
-        .slice(priorIndex + 1, canonical.index)
-        .some((block) => block.text.length > 0)
-    ) {
-      throw new WritingEvaluationPreparationError(
-        "EVALUATION_SCOPE_UNSUPPORTED",
-        "The selection crosses content that cannot be represented exactly.",
       );
     }
     const start = fragment.selectionStart;
@@ -211,10 +216,35 @@ function selectionSnapshot(
         { nodeId: fragment.nodeId },
       );
     }
-    priorIndex = canonical.index;
+    if (
+      prior &&
+      (prior.end !== prior.block.text.length ||
+        start !== 0 ||
+        blocks
+          .slice(prior.index + 1, canonical.index)
+          .some((block) => block.text.length > 0))
+    ) {
+      throw new WritingEvaluationPreparationError(
+        "EVALUATION_SCOPE_UNSUPPORTED",
+        "The selection does not form one exact contiguous range of saved text.",
+      );
+    }
+    const blockStart = blockStarts[canonical.index];
+    if (blockStart === undefined) {
+      throw new Error("Selection block offset is missing.");
+    }
+    rangeStart ??= blockStart + start;
+    rangeEnd = blockStart + end;
+    prior = { block: canonical.block, end, index: canonical.index };
   }
 
-  const targetText = fragments.map((fragment) => fragment.text).join("\n");
+  if (rangeStart === undefined || rangeEnd === undefined) {
+    throw new WritingEvaluationPreparationError(
+      "EVALUATION_SCOPE_UNSUPPORTED",
+      "Select non-empty supported text before evaluating.",
+    );
+  }
+  const targetText = fullText.slice(rangeStart, rangeEnd);
   if (!targetText.trim()) {
     throw new WritingEvaluationPreparationError(
       "EVALUATION_SCOPE_UNSUPPORTED",
@@ -234,26 +264,8 @@ function selectionSnapshot(
     };
   }
 
-  const fullText = blocks.map((block) => block.text).join("\n");
-  const blockStarts: number[] = [];
-  let offset = 0;
-  for (const block of blocks) {
-    blockStarts.push(offset);
-    offset += block.text.length + 1;
-  }
-  const first = fragments[0];
-  const last = fragments.at(-1);
-  if (!first || !last) throw new Error("Selection fragments are required.");
-  const firstBlock = positions.get(first.nodeId);
-  const lastBlock = positions.get(last.nodeId);
-  if (!firstBlock || !lastBlock)
-    throw new Error("Selection mapping disappeared.");
-  const beforeEnd =
-    (blockStarts[firstBlock.index] ?? 0) + (first.selectionStart ?? 0);
-  const afterStart =
-    (blockStarts[lastBlock.index] ?? 0) + (last.selectionEnd ?? 0);
-  const before = codePointSuffix(fullText.slice(0, beforeEnd), 1_000);
-  const after = codePointPrefix(fullText.slice(afterStart), 1_000);
+  const before = codePointSuffix(fullText.slice(0, rangeStart), 1_000);
+  const after = codePointPrefix(fullText.slice(rangeEnd), 1_000);
   return {
     targetText,
     context: {

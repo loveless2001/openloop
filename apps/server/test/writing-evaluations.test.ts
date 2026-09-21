@@ -133,6 +133,8 @@ describe("writing evaluation routes", () => {
   it("persists a mock-backed result, preserves its rubric snapshot, and enforces idempotency", async () => {
     const directory = mkdtempSync(join(tmpdir(), "openloop-writing-eval-"));
     const database = openDatabase(`file:${join(directory, "test.db")}`);
+    const evaluator = new MockWritingEvaluator();
+    const evaluate = vi.spyOn(evaluator, "evaluate");
     const server = buildServer({
       environment: testEnvironment(join(directory, "test.db")),
       database,
@@ -140,6 +142,7 @@ describe("writing evaluation routes", () => {
       criticAgentSupervisor,
       mcpBearerToken: "test-token",
       reconciliationIdleMs: 0,
+      writingEvaluator: evaluator,
     });
     cleanups.push(async () => {
       await server.close();
@@ -304,6 +307,19 @@ describe("writing evaluation routes", () => {
     });
     expect(idempotent.statusCode).toBe(202);
     expect(idempotent.json().id).toBe(runId);
+    expect(evaluate).toHaveBeenCalledTimes(1);
+    const persistedRuns = await server.inject({
+      method: "GET",
+      url: `/v1/documents/${document.id}/evaluations?limit=20`,
+    });
+    expect(
+      persistedRuns
+        .json()
+        .runs.filter(
+          (candidate: { requestId: string }) =>
+            candidate.requestId === requestId,
+        ),
+    ).toHaveLength(1);
 
     const reusedDifferently = await server.inject({
       method: "POST",

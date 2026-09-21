@@ -186,6 +186,229 @@ describe("writing evaluation preparation", () => {
     expect(prepared.compiled.incompatibleCriterionIds).toEqual([criterionTwo]);
   });
 
+  it("extracts one canonical range across empty paragraphs and partial boundary blocks", () => {
+    const firstId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const emptyId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const lastId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const content = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { nodeId: firstId },
+          content: [{ type: "text", text: "alpha" }],
+        },
+        { type: "paragraph", attrs: { nodeId: emptyId } },
+        {
+          type: "paragraph",
+          attrs: { nodeId: lastId },
+          content: [{ type: "text", text: "bravo" }],
+        },
+      ],
+    } as DocumentRecord["contentJson"];
+    const prepared = prepareWritingEvaluation({
+      document: document(content),
+      rubric: rubric(),
+      intent: {
+        documentVersion: 4,
+        rubricId,
+        rubricRevision: 2,
+        scope: {
+          kind: "selection",
+          contextMode: "nearby",
+          fragments: [
+            {
+              nodeId: firstId,
+              nodeType: "paragraph",
+              text: "pha",
+              headingPath: [],
+              selectionStart: 2,
+              selectionEnd: 5,
+            },
+            {
+              nodeId: lastId,
+              nodeType: "paragraph",
+              text: "bra",
+              headingPath: [],
+              selectionStart: 0,
+              selectionEnd: 3,
+            },
+          ],
+        },
+        languageHint: "en",
+      },
+      providerId: "mock",
+      endpointIdentity: "mock://local",
+      requestedModel: "mock-writing-fixtures-v1",
+    });
+
+    expect(prepared.preview.snapshot.targetText).toBe("pha\n\nbra");
+    expect(prepared.preview.snapshot.context).toMatchObject({
+      before: "al",
+      after: "vo",
+    });
+  });
+
+  it("makes a whole-range selection byte-for-byte equal to canonical nested text", () => {
+    const canonical = evaluationDocumentText(nestedContent);
+    const prepared = prepareWritingEvaluation({
+      document: document(nestedContent),
+      rubric: rubric(),
+      intent: {
+        documentVersion: 4,
+        rubricId,
+        rubricRevision: 2,
+        scope: {
+          kind: "selection",
+          contextMode: "nearby",
+          fragments: [
+            {
+              nodeId: paragraphOne,
+              nodeType: "paragraph",
+              text: "Quoted once",
+              headingPath: [],
+              selectionStart: 0,
+              selectionEnd: 11,
+            },
+            {
+              nodeId: paragraphTwo,
+              nodeType: "paragraph",
+              text: "Việt\nNam",
+              headingPath: [],
+              selectionStart: 0,
+              selectionEnd: 8,
+            },
+            {
+              nodeId: codeBlockId,
+              nodeType: "codeBlock",
+              text: "const x = 1;",
+              headingPath: [],
+              selectionStart: 0,
+              selectionEnd: 12,
+            },
+          ],
+        },
+        languageHint: "vi",
+      },
+      providerId: "mock",
+      endpointIdentity: "mock://local",
+      requestedModel: "mock-writing-fixtures-v1",
+    });
+
+    expect(prepared.preview.snapshot.targetText).toBe(canonical);
+    expect(prepared.preview.snapshot.context).toMatchObject({
+      before: "",
+      after: "",
+    });
+  });
+
+  it("preserves UTF-16 emoji and Vietnamese combining marks without normalization", () => {
+    const text = "😀 Vie\u0323\u0302t";
+    const content = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { nodeId: paragraphOne },
+          content: [{ type: "text", text }],
+        },
+      ],
+    } as DocumentRecord["contentJson"];
+    const selected = text.slice(0, text.length - 1);
+    const prepared = prepareWritingEvaluation({
+      document: document(content),
+      rubric: rubric(),
+      intent: {
+        documentVersion: 4,
+        rubricId,
+        rubricRevision: 2,
+        scope: {
+          kind: "selection",
+          contextMode: "none",
+          fragments: [
+            {
+              nodeId: paragraphOne,
+              nodeType: "paragraph",
+              text: selected,
+              headingPath: [],
+              selectionStart: 0,
+              selectionEnd: selected.length,
+            },
+          ],
+        },
+        languageHint: "vi",
+      },
+      providerId: "mock",
+      endpointIdentity: "mock://local",
+      requestedModel: "mock-writing-fixtures-v1",
+    });
+
+    expect(prepared.preview.snapshot.targetText).toBe(selected);
+    expect(prepared.preview.snapshot.targetText).not.toBe(
+      selected.normalize("NFC"),
+    );
+  });
+
+  it("rejects incomplete cross-block ranges instead of dropping intervening text", () => {
+    expect(() =>
+      prepareWritingEvaluation({
+        document: document(nestedContent),
+        rubric: rubric(),
+        intent: {
+          documentVersion: 4,
+          rubricId,
+          rubricRevision: 2,
+          scope: {
+            kind: "selection",
+            contextMode: "none",
+            fragments: [
+              {
+                nodeId: paragraphOne,
+                nodeType: "paragraph",
+                text: "Quoted",
+                headingPath: [],
+                selectionStart: 0,
+                selectionEnd: 6,
+              },
+              {
+                nodeId: paragraphTwo,
+                nodeType: "paragraph",
+                text: "Việt",
+                headingPath: [],
+                selectionStart: 0,
+                selectionEnd: 4,
+              },
+            ],
+          },
+          languageHint: "en",
+        },
+        providerId: "mock",
+        endpointIdentity: "mock://local",
+        requestedModel: "mock-writing-fixtures-v1",
+      }),
+    ).toThrow("one exact contiguous range");
+  });
+
+  it("rejects unsupported text nodes instead of silently omitting them", () => {
+    const unsupported = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { nodeId: paragraphOne },
+          content: [{ type: "text", text: "before" }],
+        },
+        {
+          type: "unsupportedCallout",
+          content: [{ type: "text", text: "must not disappear" }],
+        },
+      ],
+    } as DocumentRecord["contentJson"];
+    expect(() => evaluationDocumentText(unsupported)).toThrow(
+      "unsupported text",
+    );
+  });
+
   it("fails closed when a selection no longer matches canonical saved text", () => {
     expect(() =>
       prepareWritingEvaluation({

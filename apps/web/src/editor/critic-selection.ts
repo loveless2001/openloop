@@ -32,6 +32,7 @@ export function getCriticSelection(
   const snapshotById = new Map(
     textBlockSnapshots(editor.state.doc).map((block) => [block.nodeId, block]),
   );
+  const canonicalBlocks: Array<{ nodeId: string; text: string }> = [];
   const blocks: TextBlockSnapshot[] = [];
   editor.state.doc.descendants((node, position) => {
     if (
@@ -40,6 +41,10 @@ export function getCriticSelection(
     ) {
       return;
     }
+    canonicalBlocks.push({
+      nodeId: node.attrs.nodeId,
+      text: node.textBetween(0, node.content.size, "\n", "\n"),
+    });
     const contentFrom = position + 1;
     const contentTo = contentFrom + node.content.size;
     const selectedFrom = Math.max(from, contentFrom);
@@ -48,7 +53,7 @@ export function getCriticSelection(
 
     const localFrom = selectedFrom - contentFrom;
     const localTo = selectedTo - contentFrom;
-    const text = node.textBetween(localFrom, localTo, "\n");
+    const text = node.textBetween(localFrom, localTo, "\n", "\n");
     if (!text.trim()) return;
     const snapshot = snapshotById.get(node.attrs.nodeId);
     if (!snapshot) return;
@@ -57,12 +62,32 @@ export function getCriticSelection(
       nodeType: snapshot.nodeType,
       text,
       headingPath: snapshot.headingPath,
-      selectionStart: node.textBetween(0, localFrom, "\n").length,
-      selectionEnd: node.textBetween(0, localTo, "\n").length,
+      selectionStart: node.textBetween(0, localFrom, "\n", "\n").length,
+      selectionEnd: node.textBetween(0, localTo, "\n", "\n").length,
     });
   });
 
-  const text = blocks.map((block) => block.text).join("\n");
+  const first = blocks[0];
+  const last = blocks.at(-1);
+  if (!first || !last) return null;
+  const firstIndex = canonicalBlocks.findIndex(
+    (block) => block.nodeId === first.nodeId,
+  );
+  const lastIndex = canonicalBlocks.findIndex(
+    (block) => block.nodeId === last.nodeId,
+  );
+  if (firstIndex < 0 || lastIndex < firstIndex) return null;
+  const text = canonicalBlocks
+    .slice(firstIndex, lastIndex + 1)
+    .map((block, index, selectedBlocks) => {
+      const start = index === 0 ? (first.selectionStart ?? 0) : 0;
+      const end =
+        index === selectedBlocks.length - 1
+          ? (last.selectionEnd ?? block.text.length)
+          : block.text.length;
+      return block.text.slice(start, end);
+    })
+    .join("\n");
   const wordCount = countWords(text);
   if (!blocks.length || wordCount === 0) return null;
   return { blocks, from, source, text, to, wordCount };

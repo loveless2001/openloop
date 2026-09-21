@@ -87,6 +87,56 @@ middle rubric level under `jev-display.v1`. This single synthetic result proves 
 transport, validation, and persistence path worked; it is not evidence of general writing-quality
 accuracy or calibration.
 
+## J1–J2 correctness pass
+
+The correctness review at baseline `1592f4f8bd621ac164f778228375c23334ce1bdf` confirmed all five
+reported application issues. The fixes retain the J1–J2 boundaries and make no evaluator, critic,
+issue-ledger, persistence, CLI/MCP, autocomplete, or training handoff.
+
+- A prepared evaluation is now one atomic `{ identity, intent, preview }` value. Its identity binds
+  the document, editor generation, target fragments, rubric ID/revision, context mode, and language.
+  An abortable preparation epoch is checked after the save barrier and preview request; input changes
+  or a document switch invalidate the epoch and remote confirmation. Submit, initial-load, cancel,
+  and poll responses are likewise guarded by document and tracked-run identity. Completed historical
+  results are independent of preview freshness.
+- Complete-document preparation captures the current editor generation when **Prepare preview** is
+  pressed. A selection retains the generation and exact fragments captured when it was highlighted;
+  editing makes it stale and requires a new selection. The evaluation-specific save barrier reports
+  conflicts and network failures while preserving the local editable draft.
+- One explicit evaluation action owns one request ID and immutable payload. An ambiguous client
+  failure exposes **Retry submission**, which resends those exact bytes semantically (the same JSON
+  value and request ID). Starting a different run requires explicitly discarding recovery and
+  preparing/reviewing a new snapshot. The server still resolves an accepted matching request ID
+  before checking whether the live draft has since changed; a changed identity remains a conflict.
+- Submit, initial retrieval, and polling share terminal-result ingestion. A locally completed
+  all-incompatible run replaces the displayed cards immediately, records zero token usage and
+  `providerCalled: false`, and has no returned model. A pending newer run preserves the previous
+  completed result until its own completion.
+- Exact selections are extracted as a contiguous range of the canonical evaluation string rather
+  than by joining non-empty fragments. Empty paragraphs and separators are retained; partial edge
+  blocks, nested lists/quotes, hard breaks, emoji, decomposed Vietnamese combining marks, and UTF-16
+  offsets stay exact. Incomplete or unsupported mappings fail closed. Nearby context uses the same
+  canonical start/end offsets, so the target is neither duplicated nor omitted.
+
+The CI matrix continues to run formatting, lint, typecheck, unit/integration tests, and build on
+Ubuntu, macOS, and Windows. Chromium plus its OS dependencies and the Playwright suite run once on
+the Ubuntu job rather than on every platform.
+
+### Correctness verification
+
+The pass was verified without TypeSafe credentials or the paid live-smoke command:
+
+- `pnpm format:check`
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm build`
+- `pnpm test:e2e`
+
+Focused development runs additionally covered the web hook/component tests, core canonical-range
+tests, server idempotency/invocation tests, and `e2e/writing-evaluation.spec.ts`. Browser races use
+delayed or dropped mocked responses rather than sleeps or remote-provider access.
+
 ## Deferred explicitly
 
 J3 history navigation, feedback, export, and pilot tooling are absent.

@@ -96,6 +96,7 @@ export async function updateWritingRubric(
 export async function previewWritingEvaluation(
   documentId: string,
   intent: EvaluationIntent,
+  signal?: AbortSignal,
 ): Promise<EvaluationPreview> {
   const response = await fetch(
     `/v1/documents/${documentId}/evaluations/preview`,
@@ -103,6 +104,7 @@ export async function previewWritingEvaluation(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(intent),
+      signal,
     },
   );
   return EvaluationPreviewSchema.parse(await parseResponse(response));
@@ -111,11 +113,13 @@ export async function previewWritingEvaluation(
 export async function submitWritingEvaluation(
   documentId: string,
   request: CreateEvaluationRequest,
+  signal?: AbortSignal,
 ): Promise<WritingEvaluationRun> {
   const response = await fetch(`/v1/documents/${documentId}/evaluations`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
+    signal,
   });
   return WritingEvaluationRunSchema.parse(await parseResponse(response));
 }
