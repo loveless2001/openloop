@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "jev-article-scope-test.v1",
+  "articleFile": "docs/fixtures/jev-scope-article.md",
+  "languageHint": "en",
+  "rubric": {
+    "title": "Volunteer newsletter: clear and supportable advice",
+    "purpose": "Help a new volunteer follow the fictional newsletter team's backup routine, while keeping reliability claims supported and retention instructions consistent.",
+    "audience": "New volunteer editors with ordinary folder-management skills and no specialist IT background.",
+    "criteria": [
+      {
+        "id": "0eb0f50c-7652-5f60-a4a4-99715149b35c",
+        "name": "Clarity for new volunteers",
+        "question": "Can a new volunteer understand what the target says or asks them to do, including what its references and essential terms mean?",
+        "allowedScopes": ["selection", "document"],
+        "levels": [
+          {
+            "label": "Unclear",
+            "description": "Essential terms or references are unexplained, leaving the intended meaning or action unclear to a new volunteer."
+          },
+          {
+            "label": "Partly clear",
+            "description": "The main meaning or action is understandable, but at least one term, reference, or instruction needs clarification."
+          },
+          {
+            "label": "Clear",
+            "description": "The meaning and any requested action are clear to a new volunteer; essential terms and references are understandable from the supplied material."
+          }
+        ]
+      },
+      {
+        "id": "8de27e3a-62cd-5b25-bfb4-4dd799da0bfa",
+        "name": "Conciseness",
+        "question": "Does each sentence in the target add a distinct instruction, reason, example, or qualification rather than restating an existing point?",
+        "allowedScopes": ["selection", "document"],
+        "levels": [
+          {
+            "label": "Repetitive",
+            "description": "The target mainly repeats a point without adding a distinct instruction, reason, example, or qualification."
+          },
+          {
+            "label": "Some repetition",
+            "description": "The target adds useful content but also restates points without a distinct contribution."
+          },
+          {
+            "label": "Focused",
+            "description": "The target develops its points without restatement that adds no distinct content."
+          }
+        ]
+      },
+      {
+        "id": "d9e3a526-eae0-5de8-b648-d3d4f4945f9b",
+        "name": "Support for reliability claims",
+        "question": "Does the target support claims about preventing file loss with reasons or observations proportionate to their strength? Judge support in the supplied text, not external factual truth; instructions without a reliability claim are not applicable.",
+        "allowedScopes": ["selection", "document"],
+        "levels": [
+          {
+            "label": "Unsupported",
+            "description": "The target makes a strong reliability claim without proportionate reasons or observations in the supplied text."
+          },
+          {
+            "label": "Partly supported",
+            "description": "Some reliability claims have relevant support, but an important claim overstates what that support establishes."
+          },
+          {
+            "label": "Supported and qualified",
+            "description": "Reliability claims have relevant explicit support and their strength stays within the limits of that support."
+          }
+        ]
+      },
+      {
+        "id": "221ad7b1-c0c8-518d-8dcd-1168c1e6fbd9",
+        "name": "Consistent retention advice",
+        "question": "Does the complete article give compatible instructions about how long to retain the same dated archive copies?",
+        "allowedScopes": ["document"],
+        "levels": [
+          {
+            "label": "Conflicting",
+            "description": "The article gives incompatible retention instructions for the same dated archive copies without explaining an exception."
+          },
+          {
+            "label": "Ambiguous",
+            "description": "Retention instructions are incomplete or qualified unclearly, making their compatibility uncertain."
+          },
+          {
+            "label": "Consistent",
+            "description": "Retention instructions for the same dated archive copies agree, or differences have explicit, compatible conditions."
+          }
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "sentence-none",
+      "scope": "selection",
+      "unit": "sentence",
+      "contextMode": "none",
+      "targetText": "Keep that copy for thirty days."
+    },
+    {
+      "id": "sentence-nearby",
+      "scope": "selection",
+      "unit": "sentence",
+      "contextMode": "nearby",
+      "targetText": "Keep that copy for thirty days."
+    },
+    {
+      "id": "paragraph-none",
+      "scope": "selection",
+      "unit": "paragraph",
+      "contextMode": "none",
+      "targetText": "Keeping a second copy is important because it gives the team another copy. An extra copy provides an additional copy, so the team has more than one copy. This routine guarantees that the team will never lose a file. Volunteers should therefore feel completely confident that every newsletter file is safe."
+    },
+    {
+      "id": "paragraph-nearby",
+      "scope": "selection",
+      "unit": "paragraph",
+      "contextMode": "nearby",
+      "targetText": "Keeping a second copy is important because it gives the team another copy. An extra copy provides an additional copy, so the team has more than one copy. This routine guarantees that the team will never lose a file. Volunteers should therefore feel completely confident that every newsletter file is safe."
+    },
+    {
+      "id": "whole-document",
+      "scope": "document",
+      "unit": "whole",
+      "contextMode": "none"
+    }
+  ],
+  "expectationsBeforeRun": {
+    "sentence-none": "The referent of \"that copy\" is missing. Clarity may abstain for missing context or judge the ambiguity; the single sentence should not be called repetitive. Reliability support is not applicable to an instruction with no reliability claim.",
+    "sentence-nearby": "The preceding sentence identifies the dated archive copy. Clarity should become more assessable or improve; the target remains one sentence, and context must not be judged as target prose.",
+    "paragraph-none": "The first two sentences repeat the value of a second copy. The never-lose-a-file guarantee has no proportionate support. Conciseness and support should be low or mixed; phrasing can still be understandable.",
+    "paragraph-nearby": "The surrounding practice-session anecdote does not justify a guarantee of no file loss. Added context should not erase the target paragraph's repetition or unsupported certainty.",
+    "whole-document": "The thirty-day and seven-day retention instructions conflict. The document-only criterion should be assessed here and skipped locally for every selection. Other criteria need to account for both useful passages and the deliberately weak paragraph."
+  },
+  "expectationProvenance": "Assistant-authored pre-run hypotheses, not independent human labels or benchmark ground truth."
+}

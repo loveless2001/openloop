@@ -27,6 +27,7 @@ const EnvironmentSchema = z
       .string()
       .startsWith("file:")
       .default("file:./data/openloop.db"),
+    COMPLETION_ENABLED: booleanFromString.default(false),
     COMPLETION_PROVIDER: ProviderSchema.default("ollama"),
     COMPLETION_BASE_URL: z.url().default("http://127.0.0.1:11434/v1"),
     COMPLETION_API_KEY: z.string().default(""),
@@ -68,6 +69,7 @@ const EnvironmentSchema = z
   })
   .superRefine((environment, context) => {
     if (
+      environment.COMPLETION_ENABLED &&
       environment.COMPLETION_PROVIDER === "openai" &&
       !environment.COMPLETION_API_KEY
     ) {

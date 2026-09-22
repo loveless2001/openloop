@@ -205,6 +205,22 @@ export const writingEvaluationRuns = sqliteTable(
   ],
 );
 
+export const writingEvaluationFeedback = sqliteTable(
+  "writing_evaluation_feedback",
+  {
+    runId: text("run_id")
+      .notNull()
+      .references(() => writingEvaluationRuns.id, { onDelete: "cascade" }),
+    criterionId: text("criterion_id").notNull(),
+    verdict: text("verdict").notNull(),
+    preferredLevel: integer("preferred_level"),
+    comment: text("comment"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.runId, table.criterionId] })],
+);
+
 export const preferenceWeights = sqliteTable(
   "preference_weights",
   {

@@ -277,6 +277,23 @@ The in-process evaluator has one active and two queued jobs globally. Request ID
 restart leaves unfinished work interrupted rather than resent, and terminal/deleted rows cannot be
 revived by late results. The J1 mock is fixed fixture plumbing labeled **Mock — UI test only**; it is
 not a writing heuristic. J2 uses a separate native-fetch TypeSafe adapter with one attempt, explicit
-remote confirmation, validated native responses, and no mock fallback. Feedback/history export is
-deferred to J3. This preserves the document and claim ledger as separate authorities while making
+remote confirmation, validated native responses, and no mock fallback. J3 adds feedback/history export.
+This preserves the document and claim ledger as separate authorities while making
 stale evaluation provenance explicit.
+
+## 030 — Keep evaluation observations and author feedback separate
+
+J3 feedback is mutable author input keyed by `(runId, criterionId)`, validated against the saved
+rubric, and deleted with the run. Feedback never rewrites results, hashes, or rubric revisions.
+Versioned exports preserve source text, raw validated criterion values, assessability, policy,
+model/usage provenance, and separately labeled author feedback. Silence does not create a label;
+neither model judgments nor feedback are automatically treated as verified training targets.
+
+The paired synthetic pilot preflights every fixture before calling the evaluator, requires explicit
+remote opt-in, records errors without fabricating usage, and stops at the first failed evaluation.
+Outputs go under ignored `data/` paths with exclusive creation. It does not inspect the user's
+document database or feed the completion training pipeline.
+
+Autocomplete is temporarily disabled by default with `COMPLETION_ENABLED=false`. The switch blocks
+startup warmup, editor suggestions, and server completion inference. Existing completion code and
+its explicit opt-in regression tests remain available for later use.

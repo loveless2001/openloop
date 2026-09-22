@@ -4,8 +4,16 @@ import { readEnvironment } from "../config/env.js";
 import { selectModelAdapters } from "./provider.js";
 
 describe("model role selection", () => {
-  it("routes completion locally and keeps the critic independently mocked", () => {
+  it("does not construct an Ollama runtime while autocomplete is disabled", () => {
     const selected = selectModelAdapters(readEnvironment({}));
+    expect(selected.completion.warmup).toBeUndefined();
+    expect(selected.completion.shutdown).toBeUndefined();
+    expect(selected.critic.adapter.providerId).toBe("mock");
+  });
+  it("routes completion locally and keeps the critic independently mocked", () => {
+    const selected = selectModelAdapters(
+      readEnvironment({ COMPLETION_ENABLED: "true" }),
+    );
 
     expect(selected.completion.adapter.providerId).toBe("ollama");
     expect(selected.completion.model).toBe(
@@ -18,6 +26,7 @@ describe("model role selection", () => {
   it("can pair local completion with a remote OpenAI critic", () => {
     const selected = selectModelAdapters(
       readEnvironment({
+        COMPLETION_ENABLED: "true",
         CRITIC_PROVIDER: "openai",
         CRITIC_API_KEY: "test-key",
       }),

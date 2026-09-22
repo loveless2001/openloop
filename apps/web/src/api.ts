@@ -32,6 +32,10 @@ import {
   EvaluatorStatusResponseSchema,
   WritingEvaluationListResponseSchema,
   WritingEvaluationRunSchema,
+  WritingEvaluationFeedbackSchema,
+  WritingEvaluationFeedbackListSchema,
+  WritingEvaluationExportSchema,
+  type WritingEvaluationFeedbackInput,
   WritingRubricListResponseSchema,
   WritingRubricSchema,
   type CreateEvaluationRequest,
@@ -126,9 +130,10 @@ export async function submitWritingEvaluation(
 
 export async function listWritingEvaluations(
   documentId: string,
+  offset = 0,
 ): Promise<WritingEvaluationRunSummary[]> {
   const response = await fetch(
-    `/v1/documents/${documentId}/evaluations?limit=20`,
+    `/v1/documents/${documentId}/evaluations?limit=20&offset=${offset}`,
   );
   return WritingEvaluationListResponseSchema.parse(
     await parseResponse(response),
@@ -149,6 +154,34 @@ export async function cancelWritingEvaluation(
     method: "POST",
   });
   return WritingEvaluationRunSchema.parse(await parseResponse(response));
+}
+
+export async function loadEvaluationFeedback(runId: string) {
+  const response = await fetch(`/v1/evaluations/${runId}/feedback`);
+  return WritingEvaluationFeedbackListSchema.parse(
+    await parseResponse(response),
+  ).feedback;
+}
+
+export async function saveEvaluationFeedback(
+  runId: string,
+  criterionId: string,
+  input: WritingEvaluationFeedbackInput,
+) {
+  const response = await fetch(
+    `/v1/evaluations/${runId}/feedback/${criterionId}`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return WritingEvaluationFeedbackSchema.parse(await parseResponse(response));
+}
+
+export async function exportWritingEvaluation(runId: string) {
+  const response = await fetch(`/v1/evaluations/${runId}/export`);
+  return WritingEvaluationExportSchema.parse(await parseResponse(response));
 }
 
 export async function loadCriticAgentStatus(): Promise<CriticAgentStatusResponse> {

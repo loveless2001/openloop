@@ -14,6 +14,7 @@ const environment = readEnvironment({
   NODE_ENV: "test",
   DATABASE_URL: `file:${join(tempDirectory, "test.db")}`,
   COMPLETION_PROVIDER: "mock",
+  COMPLETION_ENABLED: "true",
   CRITIC_PROVIDER: "mock",
   CAPTURE_TRAINING_TRACES: "true",
   TRAINING_TRACE_PATH: join(tempDirectory, "completion-traces.jsonl"),

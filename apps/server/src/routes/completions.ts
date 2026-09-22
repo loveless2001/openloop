@@ -31,6 +31,7 @@ export function registerCompletionRoutes(
   database: Database,
   selectedModel: SelectedModelAdapters,
   trainingTraceWriter: TrainingTraceWriter,
+  enabled: boolean,
 ): void {
   const promptVersion =
     selectedModel.completion.adapter.providerId === "ollama"
@@ -39,6 +40,15 @@ export function registerCompletionRoutes(
   const maxOutputTokens =
     selectedModel.completion.adapter.providerId === "ollama" ? 12 : 60;
   server.post("/v1/completions/stream", async (request, reply) => {
+    if (!enabled) {
+      return reply.code(503).send({
+        error: {
+          code: "COMPLETION_DISABLED",
+          message: "Autocomplete is disabled.",
+          requestId: request.id,
+        },
+      });
+    }
     const input = CompletionStreamRequestSchema.parse(request.body);
     if (sha256(input.prefix) !== input.prefixHash) {
       return reply.code(400).send({

@@ -103,7 +103,9 @@ export function selectModelAdapters(
   }
   return {
     completion: selectModel({
-      provider: environment.COMPLETION_PROVIDER,
+      provider: environment.COMPLETION_ENABLED
+        ? environment.COMPLETION_PROVIDER
+        : "mock",
       baseUrl: environment.COMPLETION_BASE_URL,
       apiKey: environment.COMPLETION_API_KEY,
       model: environment.COMPLETION_MODEL,

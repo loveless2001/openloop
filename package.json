@@ -15,6 +15,7 @@
     "test": "pnpm -r --if-present test",
     "test:e2e": "playwright test",
     "test:jev-live": "pnpm --filter @openloop/server exec tsx ../../scripts/smoke-jev-writing-evaluation.ts",
+    "eval:jev": "pnpm --filter @openloop/server exec tsx ../../scripts/eval-jev.ts",
     "db:generate": "pnpm --filter @openloop/server db:generate",
     "db:migrate": "pnpm --filter @openloop/server db:migrate",
     "db:reset": "pnpm --filter @openloop/server db:reset",

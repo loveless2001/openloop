@@ -297,9 +297,11 @@ export function SettingsDialog({
               <div>
                 <dt>Autocomplete</dt>
                 <dd>
-                  {modelStatus
-                    ? `${modelStatus.provider} · ${modelStatus.completionModel}`
-                    : "Unavailable"}
+                  {modelStatus?.state === "disabled"
+                    ? "Off"
+                    : modelStatus
+                      ? `${modelStatus.provider} · ${modelStatus.completionModel}`
+                      : "Unavailable"}
                 </dd>
               </div>
               <div>
@@ -318,8 +320,8 @@ export function SettingsDialog({
               <p>Local data</p>
               <small>
                 Delete saved documents, issue history, chats, model-run
-                metadata, optional training traces, and preferences from this
-                device.
+                metadata, evaluation snapshots and feedback, optional training
+                traces, and preferences from this device.
               </small>
             </div>
             <button

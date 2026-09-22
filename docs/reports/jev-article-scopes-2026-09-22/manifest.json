@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "jev-article-scope-run.v1",
+  "startedAt": "2026-09-22T10:41:19.154Z",
+  "provider": "typesafe",
+  "requestedModel": "jev-1.13.0",
+  "endpoint": "https://api.typesafe.ai/v1/systemone",
+  "timeoutMs": 30000,
+  "completionEnabled": false,
+  "criticProvider": "mock",
+  "trainingTraceCapture": false,
+  "fixtureSha256": "d332691bb57e5a69edabb146853e33496acd86d9befdf31feb696361f0a97865",
+  "articleSha256": "a754b502f2184eca121aae543a1fe4a284103a772836e5e84b5c2f79a451c9fe",
+  "sourceHashes": {
+    "scripts/test-jev-article-scopes.ts": "272b8bdfabf09eca27f6d8318c01914b71c81abd200b5463726de1072e03160c",
+    "packages/core/src/writing-evaluation.ts": "e5f03ad608012bfaaba54e9b40b93f25e265010a40d236a1a1af3bd56f81df13",
+    "packages/model-adapters/src/typesafe-writing-evaluator.ts": "774316848bc5c63123029b58ba4f1558329421153ccb297bad7a2083b65ec93f",
+    "apps/server/src/writing-evaluation-service.ts": "4163a82f4872a83a6f15322d476cc37d1e0b0d50fcea0e5565b3e2a8365981a7",
+    "packages/shared/src/writing-evaluation.ts": "d5f56d65ef1b6054631b86e246f204926af19843261e6f280e86c0b3f823fae3",
+    "apps/web/src/use-writing-evaluation.ts": "6cf263c20185e606b35b92d8291b3831b61cfd4b09e5b50f3268929ee23f09dd"
+  },
+  "baseCommit": "48ad2cc45b2f68cf4f0b6e0360f32d0030d2c445",
+  "worktreeState": "J3 implementation is uncommitted; sourceHashes identify the tested implementation.",
+  "maximumRemoteCalls": 5,
+  "retries": 0,
+  "finishedAt": "2026-09-22T10:41:30.808Z",
+  "documentId": "fde9536f-4425-4d99-9115-7b2b55249042",
+  "rubricId": "edad67ec-48f1-4cec-b71f-3f853fa49644",
+  "actualRemoteCalls": 5,
+  "terminalRuns": 5,
+  "unattemptedCases": 0,
+  "status": "completed"
+}

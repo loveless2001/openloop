@@ -1,6 +1,6 @@
-# Writing rubric evaluation — J0–J2 implementation map
+# Writing rubric evaluation — J0–J3 implementation map
 
-This document records the J0 inspection, J1 mock-backed vertical slice, and J2 native transport. The J milestones are
+This document records the J0 inspection, J1 mock-backed vertical slice, J2 native transport, and J3 research workflow. The J milestones are
 separate from the original harness Phase 0–6 work. The implementation was mapped against
 `6547a3675ee89f18f3b8ac966c1f52d38845ae69`; the reference commit named by the specification was
 not checked out or used to replace local state.
@@ -137,8 +137,62 @@ Focused development runs additionally covered the web hook/component tests, core
 tests, server idempotency/invocation tests, and `e2e/writing-evaluation.spec.ts`. Browser races use
 delayed or dropped mocked responses rather than sleeps or remote-provider access.
 
-## Deferred explicitly
+## J3 research workflow — 2026-09-22
 
-J3 history navigation, feedback, export, and pilot tooling are absent.
+- Evaluation history paginates run summaries and opens saved source/context and rubric revisions.
+  Selecting history is separate from preparing or submitting a new evaluation; saved offsets are
+  not attached to the current editor. The latest result remains available through an explicit button.
+- Per-criterion feedback records an explicit verdict, optional preferred level, and comment up to
+  2,000 characters. The server requires a completed run and validates against that run's saved
+  rubric, including criteria subsequently removed from the live rubric. Saving feedback updates
+  only the feedback row; missing optional fields clear prior values. No feedback is inferred.
+- Migration `0004_loud_sunfire.sql` adds `writing_evaluation_feedback`, keyed by run and criterion.
+  Run/document/local-data deletion cascades to feedback. Existing migrations and runs are retained.
+- `GET /v1/evaluations/:runId/feedback` retrieves saved author feedback;
+  `PUT /v1/evaluations/:runId/feedback/:criterionId` validates and saves it.
+  `GET /v1/evaluations/:runId/export` returns a versioned JSON attachment with immutable inputs,
+  compiled request, model/result/usage provenance, saved display policy, and separate feedback.
+  The UI warns that source text, context, rubric, and saved comments are included.
+- `pnpm eval:jev` runs versioned paired synthetic fixtures through the existing compiler,
+  adapter, and display policy. All inputs are preflighted, remote use requires explicit opt-in,
+  and the first failure stops the batch. Outputs are versioned JSONL under ignored `data/`.
+  See `docs/JEV-PILOT.md` for the eight pairs, worksheet, schema, and interpretation limits.
+
+Model assessments, mock fixtures, and author feedback retain distinct provenance for later
+research. None are automatically accepted as ground truth or sent into training.
+
+### J3 verification
+
+Local verification on 2026-09-22 passed `pnpm format:check`, `pnpm lint`, `pnpm typecheck`,
+`pnpm test`, and `pnpm build`. The browser suite covered ten scenarios; the J3 cases were also
+rerun after the historical-feedback preservation fix and visual check. Coverage includes delayed
+history responses, a new evaluation completing while old-run feedback is unsaved, feedback
+persistence across reload, export of the old rubric revision, and disabled autocomplete.
+One existing platform-dependent server test remains skipped in this environment.
+
+The command-line mock pilot completed 16/16 evaluations across eight English/Vietnamese pairs,
+with zero failures or unattempted cases. Its local artifact is
+`data/evaluations/j3-mock-validation.jsonl` (ignored by Git). These results verify integration only.
+No live TypeSafe pilot, training job, hosted CI run, commit, or push was performed for J3.
+
+### Follow-up live article test
+
+After J3 implementation, the separately requested [September 22 article-scope test](reports/jev-article-scopes-2026-09-22.md)
+completed five real `jev-1.13.0` requests through the browser: sentence and paragraph selections
+with/without nearby context, and the complete article. It used one synthetic article and the same
+four-criterion saved rubric, consumed 9,877 input and 2,139 output tokens, and retained the exact
+exports and application history. This is a small exploratory behavior observation, not training
+validation. No retries or further live runs were made.
+
+## Autocomplete disabled by default
+
+`COMPLETION_ENABLED=false` now suppresses model warmup, editor suggestions (including dictionary
+suggestions), and completion inference. `/v1/model-status` reports `disabled`, and the stream route
+returns `COMPLETION_DISABLED` before touching model-run or training-trace state. Critic and evaluator
+configuration remain independent. Set `COMPLETION_ENABLED=true` and restart to restore completion;
+existing completion regression suites explicitly opt in.
+
+## Remaining boundaries
+
 Automatic evaluation, issue/critic handoff, extra MCP tools, model training, and document mutation
 remain outside the POC boundary.

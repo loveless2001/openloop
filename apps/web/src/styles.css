@@ -614,7 +614,8 @@ textarea {
 .evaluation-controls label,
 .rubric-editor > label,
 .rubric-criterion-editor > label,
-.rubric-level-row label {
+.rubric-level-row label,
+.evaluation-feedback label {
   display: grid;
   gap: 5px;
   color: #5f5850;
@@ -623,6 +624,8 @@ textarea {
 }
 
 .evaluation-controls select,
+.evaluation-feedback select,
+.evaluation-feedback textarea,
 .rubric-editor input,
 .rubric-editor textarea {
   width: 100%;
@@ -649,7 +652,10 @@ textarea {
 .rubric-picker-actions button,
 .rubric-editor-actions button,
 .criterion-order-actions button,
-.evaluation-run-state button {
+.evaluation-run-state button,
+.evaluation-history button,
+.evaluation-feedback button,
+.evaluation-export button {
   padding: 6px 8px;
   border: 1px solid #c8beb1;
   border-radius: 5px;
@@ -1828,4 +1834,79 @@ textarea {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   margin-top: 4px;
+}
+
+.evaluation-history,
+.evaluation-feedback,
+.evaluation-export {
+  padding: 12px;
+  border: 1px solid #d8d0c4;
+  border-radius: 8px;
+  background: #fffdf8;
+  font-size: 12px;
+}
+
+.evaluation-history ul {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.evaluation-history li button {
+  width: 100%;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.evaluation-history button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.evaluation-history h3 {
+  margin-top: 0;
+  color: #2d2924;
+  font-family: Georgia, serif;
+}
+
+.evaluation-feedback legend {
+  padding-bottom: 8px;
+  color: #534d46;
+  font-weight: 700;
+}
+
+.evaluation-history button[aria-pressed="true"] {
+  border-color: #789a89;
+  background: #eef7f3;
+}
+
+.evaluation-feedback fieldset,
+.evaluation-feedback label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.evaluation-feedback fieldset {
+  border: 0;
+  padding: 0;
+}
+
+.evaluation-feedback textarea,
+.evaluation-feedback select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px;
+  font: inherit;
+}
+
+.evaluation-feedback textarea {
+  min-height: 65px;
+  resize: vertical;
+}
+
+.evaluation-feedback-note {
+  color: #625b53;
+  font-size: 12px;
 }

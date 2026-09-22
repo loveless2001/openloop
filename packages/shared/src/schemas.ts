@@ -93,7 +93,7 @@ export const ModelStatusResponseSchema = z.object({
   criticProvider: z.string().min(1),
   criticModel: z.string().min(1),
   mode: z.enum(["offline", "local", "remote"]),
-  state: z.enum(["ready", "warming", "unavailable"]),
+  state: z.enum(["ready", "warming", "unavailable", "disabled"]),
 });
 
 export type ModelStatusResponse = z.infer<typeof ModelStatusResponseSchema>;

@@ -29,6 +29,13 @@
       "when": 1789983453699,
       "tag": "0003_smart_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790071731011,
+      "tag": "0004_loud_sunfire",
+      "breakpoints": true
     }
   ]
 }

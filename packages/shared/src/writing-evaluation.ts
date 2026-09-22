@@ -285,6 +285,62 @@ export const WritingEvaluationRunSchema =
       .optional(),
   });
 
+export const WritingEvaluationFeedbackInputSchema = z
+  .object({
+    verdict: z.enum([
+      "agree",
+      "disagree",
+      "unclear_rubric",
+      "missing_context",
+      "not_applicable",
+      "unsure",
+    ]),
+    preferredLevel: z.number().int().min(0).max(2).optional(),
+    comment: z.string().max(2_000).optional(),
+  })
+  .strict();
+
+export const WritingEvaluationFeedbackSchema =
+  WritingEvaluationFeedbackInputSchema.extend({
+    runId: z.uuid(),
+    criterionId: z.uuid(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  });
+
+export const WritingEvaluationFeedbackListSchema = z.object({
+  feedback: z.array(WritingEvaluationFeedbackSchema),
+});
+
+export const WritingEvaluationExportSchema = z.object({
+  schemaVersion: z.literal("writing-evaluation-export.v1"),
+  exportedAt: z.iso.datetime(),
+  sourceTextWarning: z.literal(
+    "Contains the evaluated source text, context, rubric, and author comments.",
+  ),
+  signalProvenance: z.object({
+    assessment: z.enum(["mock_fixture", "model_assessment"]),
+    feedback: z.literal("author_feedback_not_verified_ground_truth"),
+  }),
+  run: WritingEvaluationRunSchema,
+  policy: z.object({
+    version: z.literal("jev-display.v1"),
+    assessabilityThreshold: z.number().min(0).max(1),
+    levelThreshold: z.number().min(0).max(1),
+  }),
+  feedback: z.array(WritingEvaluationFeedbackSchema),
+});
+
+export type WritingEvaluationFeedbackInput = z.infer<
+  typeof WritingEvaluationFeedbackInputSchema
+>;
+export type WritingEvaluationFeedback = z.infer<
+  typeof WritingEvaluationFeedbackSchema
+>;
+export type WritingEvaluationExport = z.infer<
+  typeof WritingEvaluationExportSchema
+>;
+
 export const EvaluationPreviewSchema = z.object({
   snapshot: EvaluationSnapshotSchema,
   compiledRequest: CompiledProviderRequestSchema,

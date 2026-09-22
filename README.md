@@ -13,9 +13,9 @@ This repository implements the Phase 0–6 MVP in
 issue ledger, anchor reconciliation, deterministic resurfacing, guarded Markdown export, and local
 privacy controls.
 
-It also includes the separate J0–J2 writing-rubric evaluation slice described in
+It also includes the separate J0–J3 writing-rubric evaluation workflow described in
 [`docs/JEV-EVALUATION.md`](docs/JEV-EVALUATION.md). It supports both a clearly labeled local mock
-and explicit native Jev evaluation; it does not include the J3 research workflow.
+and explicit native Jev evaluation, run history, author feedback, JSON exports, and a synthetic pilot runner.
 
 The implemented vertical slice provides a TipTap editor with persistent paragraph, heading, and
 blockquote node IDs; a changed-node accumulator; debounced autosave; optimistic document
@@ -27,7 +27,7 @@ and error states. Markdown files can be opened and exported from the File menu.
 
 - Node.js 20 or newer
 - pnpm 10
-- Ollama with the configured SmolLM3-3B-Base Q4_K_M artifact for the default local autocomplete path
+- Optional: Ollama with the configured SmolLM3-3B-Base Q4_K_M artifact when autocomplete is enabled
 - macOS or Linux, tmux, and an authenticated Codex or Claude CLI when using
   `CRITIC_PROVIDER=cli-agent` (Windows users can run this optional mode inside WSL)
 
@@ -41,7 +41,6 @@ cp .env.example .env
 Copy-Item .env.example .env
 
 pnpm install
-pnpm setup:ollama
 pnpm db:migrate
 pnpm dev
 ```
@@ -49,10 +48,12 @@ pnpm dev
 Open <http://127.0.0.1:5173>. The web application proxies `/v1` requests to the API at
 <http://127.0.0.1:8787>. `GET /v1/health` returns `{"status":"ok"}`.
 
-The default configuration uses the 1.9 GB
+Autocomplete is disabled by default (`COMPLETION_ENABLED=false`), including model warmup and
+completion requests. To restore it, set `COMPLETION_ENABLED=true` and restart the server.
+The retained local configuration uses the 1.9 GB
 [`SmolLM3-3B-Base`](https://huggingface.co/HuggingFaceTB/SmolLM3-3B-Base) Q4_K_M
 [GGUF](https://huggingface.co/mradermacher/SmolLM3-3B-Base-GGUF) through Ollama for autocomplete
-and the deterministic mock for criticism, so document text does not leave the machine. Local state
+and the deterministic mock for criticism. Local state
 is stored in `data/openloop.db`, which is excluded from Git. The browser remembers the current
 document ID in local storage, reloads it on startup, and creates a blank document when no saved
 document exists.
@@ -61,12 +62,12 @@ document exists.
 server when necessary, and pulls the configured completion model if it is missing. It reads
 `COMPLETION_PROVIDER`, `COMPLETION_BASE_URL`, and `COMPLETION_MODEL` from `.env`.
 
-Starting OpenLoop owns the remaining runtime lifecycle. Server boot probes Ollama, launches
+When autocomplete is enabled, OpenLoop owns the remaining runtime lifecycle. Server boot probes Ollama, launches
 `ollama serve` when the configured local endpoint is unavailable, verifies the model, warms it, and
 only then exposes the API as ready. Shutdown stops Ollama only when OpenLoop started that process;
 an Ollama instance that was already running is left untouched.
 
-## Writing rubric evaluation (J0–J2)
+## Writing rubric evaluation (J0–J3)
 
 Choose **Evaluate document** in the header, or highlight non-empty text and choose **Evaluate** in
 the selection toolbar. The Evaluation tab shares the right workspace with Open loops, so switching
@@ -87,6 +88,22 @@ makes one native `/v1/systemone` attempt with no silent mock fallback. `pnpm tes
 one synthetic, persisted-through-the-service smoke evaluation and prints only sanitized provenance
 and result metadata. See [`docs/JEV-EVALUATION.md`](docs/JEV-EVALUATION.md) for the transport and
 remaining boundary.
+
+**Evaluation history** opens a run's saved target, context, and rubric, including earlier rubric
+revisions. Record a verdict, optional preferred level, and comment for each criterion, then choose
+**Save feedback**. **Export evaluation JSON** downloads a versioned record containing source text,
+validated assessments, provenance, and saved feedback. Model assessments and author feedback are
+separate signals; mock outputs are labeled fixtures. Nothing automatically enters training.
+
+The local synthetic pilot uses the same compiler, adapter, and display policy:
+
+```bash
+pnpm eval:jev -- --input docs/fixtures/jev-writing-pilot.json --provider mock --output data/evaluations/pilot.jsonl
+```
+
+Use a new output filename for each invocation. A remote pilot additionally requires
+`--provider typesafe --allow-remote` and configured credentials. See
+[`docs/JEV-PILOT.md`](docs/JEV-PILOT.md) for the worksheet, fixture schema, and interpretation limits.
 
 ## Inline completion
 
@@ -217,7 +234,7 @@ explicitly export anyway. The server enforces the same guard and serializes cano
 the `.md` contains document content only. Export events store version and issue counts, never text.
 
 Settings includes a confirmed **Delete local data** action. It transactionally clears documents,
-issues, event history, issue chats, writing rubrics and evaluation snapshots, model-run metadata,
+issues, event history, issue chats, writing rubrics, evaluation snapshots and feedback, model-run metadata,
 export events, and preference weights, then removes optional training traces plus the OpenLoop
 browser profile and current-document pointer.
 

@@ -184,7 +184,7 @@ export function buildServer({
           }
         : {}),
     });
-  if (activeModel.completion.warmup) {
+  if (environment.COMPLETION_ENABLED && activeModel.completion.warmup) {
     server.addHook("onReady", async () => {
       await activeModel.completion.warmup?.();
       server.log.info(
@@ -220,6 +220,7 @@ export function buildServer({
   server.get("/v1/health", async () => ({ status: "ok" as const }));
   server.get("/v1/model-status", async () => {
     if (
+      environment.COMPLETION_ENABLED &&
       activeModel.completion.runtime.state === "unavailable" &&
       activeModel.completion.warmup
     ) {
@@ -230,7 +231,9 @@ export function buildServer({
       completionModel: activeModel.completion.model,
       criticProvider: activeModel.critic.adapter.providerId,
       criticModel: activeModel.critic.model,
-      state: activeModel.completion.runtime.state,
+      state: environment.COMPLETION_ENABLED
+        ? activeModel.completion.runtime.state
+        : "disabled",
       mode:
         activeModel.completion.adapter.providerId === "mock"
           ? "offline"
@@ -252,6 +255,7 @@ export function buildServer({
     activeDatabase,
     activeModel,
     activeTrainingTraceWriter,
+    environment.COMPLETION_ENABLED,
   );
   registerCriticRoutes(
     server,

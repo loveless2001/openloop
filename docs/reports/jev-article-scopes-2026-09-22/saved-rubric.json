@@ -1,0 +1,91 @@
+{
+  "title": "Volunteer newsletter: clear and supportable advice",
+  "purpose": "Help a new volunteer follow the fictional newsletter team's backup routine, while keeping reliability claims supported and retention instructions consistent.",
+  "audience": "New volunteer editors with ordinary folder-management skills and no specialist IT background.",
+  "criteria": [
+    {
+      "id": "b10816e8-6087-4114-99dd-93259e2989bb",
+      "name": "Clarity for new volunteers",
+      "question": "Can a new volunteer understand what the target says or asks them to do, including what its references and essential terms mean?",
+      "allowedScopes": ["selection", "document"],
+      "levels": [
+        {
+          "label": "Unclear",
+          "description": "Essential terms or references are unexplained, leaving the intended meaning or action unclear to a new volunteer."
+        },
+        {
+          "label": "Partly clear",
+          "description": "The main meaning or action is understandable, but at least one term, reference, or instruction needs clarification."
+        },
+        {
+          "label": "Clear",
+          "description": "The meaning and any requested action are clear to a new volunteer; essential terms and references are understandable from the supplied material."
+        }
+      ]
+    },
+    {
+      "id": "80cc9e57-cb5a-4505-9e3e-f7537f8145ba",
+      "name": "Conciseness",
+      "question": "Does each sentence in the target add a distinct instruction, reason, example, or qualification rather than restating an existing point?",
+      "allowedScopes": ["selection", "document"],
+      "levels": [
+        {
+          "label": "Repetitive",
+          "description": "The target mainly repeats a point without adding a distinct instruction, reason, example, or qualification."
+        },
+        {
+          "label": "Some repetition",
+          "description": "The target adds useful content but also restates points without a distinct contribution."
+        },
+        {
+          "label": "Focused",
+          "description": "The target develops its points without restatement that adds no distinct content."
+        }
+      ]
+    },
+    {
+      "id": "54fa5a83-7fc9-4c59-bd30-24879286a88e",
+      "name": "Support for reliability claims",
+      "question": "Does the target support claims about preventing file loss with reasons or observations proportionate to their strength? Judge support in the supplied text, not external factual truth; instructions without a reliability claim are not applicable.",
+      "allowedScopes": ["selection", "document"],
+      "levels": [
+        {
+          "label": "Unsupported",
+          "description": "The target makes a strong reliability claim without proportionate reasons or observations in the supplied text."
+        },
+        {
+          "label": "Partly supported",
+          "description": "Some reliability claims have relevant support, but an important claim overstates what that support establishes."
+        },
+        {
+          "label": "Supported and qualified",
+          "description": "Reliability claims have relevant explicit support and their strength stays within the limits of that support."
+        }
+      ]
+    },
+    {
+      "id": "ec9f33c1-de75-4f22-a44a-133780af52ff",
+      "name": "Consistent retention advice",
+      "question": "Does the complete article give compatible instructions about how long to retain the same dated archive copies?",
+      "allowedScopes": ["document"],
+      "levels": [
+        {
+          "label": "Conflicting",
+          "description": "The article gives incompatible retention instructions for the same dated archive copies without explaining an exception."
+        },
+        {
+          "label": "Ambiguous",
+          "description": "Retention instructions are incomplete or qualified unclearly, making their compatibility uncertain."
+        },
+        {
+          "label": "Consistent",
+          "description": "Retention instructions for the same dated archive copies agree, or differences have explicit, compatible conditions."
+        }
+      ]
+    }
+  ],
+  "id": "edad67ec-48f1-4cec-b71f-3f853fa49644",
+  "revision": 1,
+  "createdAt": "2026-09-22T10:41:22.860Z",
+  "updatedAt": "2026-09-22T10:41:22.860Z"
+}

@@ -202,7 +202,8 @@ export function registerDocumentRoutes(
     }
     if (error instanceof WritingEvaluationServiceError) {
       const status =
-        error.code === "WRITING_EVALUATION_NOT_FOUND"
+        error.code === "WRITING_EVALUATION_NOT_FOUND" ||
+        error.code === "EVALUATION_CRITERION_NOT_FOUND"
           ? 404
           : error.code === "EVALUATION_BUSY"
             ? 429

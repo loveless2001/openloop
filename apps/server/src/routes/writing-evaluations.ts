@@ -1,6 +1,7 @@
 import {
   CreateEvaluationRequestSchema,
   EvaluationIntentSchema,
+  WritingEvaluationFeedbackInputSchema,
 } from "@openloop/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -41,6 +42,36 @@ export function registerWritingEvaluationRoutes(
   server.get("/v1/evaluations/:runId", async (request) => {
     const { runId } = RunParamsSchema.parse(request.params);
     return evaluations.get(runId);
+  });
+
+  server.get("/v1/evaluations/:runId/feedback", async (request) => {
+    const { runId } = RunParamsSchema.parse(request.params);
+    return { feedback: evaluations.feedback(runId) };
+  });
+
+  server.put(
+    "/v1/evaluations/:runId/feedback/:criterionId",
+    async (request) => {
+      const { runId, criterionId } = RunParamsSchema.extend({
+        criterionId: z.uuid(),
+      }).parse(request.params);
+      return evaluations.saveFeedback(
+        runId,
+        criterionId,
+        WritingEvaluationFeedbackInputSchema.parse(request.body),
+      );
+    },
+  );
+
+  server.get("/v1/evaluations/:runId/export", async (request, reply) => {
+    const { runId } = RunParamsSchema.parse(request.params);
+    return reply
+      .header("cache-control", "no-store")
+      .header(
+        "content-disposition",
+        `attachment; filename="evaluation-${runId}.json"`,
+      )
+      .send(evaluations.export(runId));
   });
 
   server.post("/v1/evaluations/:runId/cancel", async (request) => {

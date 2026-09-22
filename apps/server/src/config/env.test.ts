@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { readEnvironment } from "./env.js";
 
 describe("model environment", () => {
-  it("defaults autocomplete to the small local model and critic to mock", () => {
+  it("disables autocomplete by default and keeps its configuration for later use", () => {
     const environment = readEnvironment({});
+    expect(environment.COMPLETION_ENABLED).toBe(false);
 
     expect(environment.COMPLETION_PROVIDER).toBe("ollama");
     expect(environment.COMPLETION_MODEL).toBe(

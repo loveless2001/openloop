@@ -15,6 +15,10 @@ import {
   WritingEvaluationResultSchema,
   WritingEvaluationRunSchema,
   WritingEvaluationRunSummarySchema,
+  WritingEvaluationFeedbackSchema,
+  WritingEvaluationFeedbackInputSchema,
+  WritingEvaluationExportSchema,
+  type WritingEvaluationFeedbackInput,
   type CreateEvaluationRequest,
   type EvaluationIntent,
   type EvaluationPreview,
@@ -25,7 +29,10 @@ import {
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import type { Database } from "./db/client.js";
-import { writingEvaluationRuns } from "./db/schema.js";
+import {
+  writingEvaluationRuns,
+  writingEvaluationFeedback,
+} from "./db/schema.js";
 import { getDocument } from "./documents.js";
 import { getWritingRubric } from "./writing-rubrics.js";
 
@@ -58,6 +65,8 @@ export class WritingEvaluationServiceError extends Error {
       | "EVALUATION_REQUEST_CONFLICT"
       | "EVALUATION_PREVIEW_STALE"
       | "EVALUATION_BUSY"
+      | "EVALUATION_FEEDBACK_UNAVAILABLE"
+      | "EVALUATION_CRITERION_NOT_FOUND"
       | "EVALUATOR_NOT_CONFIGURED",
     message: string,
     readonly details?: Record<string, unknown>,
@@ -291,7 +300,10 @@ export class WritingEvaluationService {
       .select()
       .from(writingEvaluationRuns)
       .where(eq(writingEvaluationRuns.documentId, documentId))
-      .orderBy(desc(writingEvaluationRuns.createdAt))
+      .orderBy(
+        desc(writingEvaluationRuns.createdAt),
+        desc(writingEvaluationRuns.id),
+      )
       .limit(limit)
       .offset(offset)
       .all()
@@ -311,6 +323,101 @@ export class WritingEvaluationService {
       );
     }
     return toRun(row);
+  }
+
+  feedback(runId: string) {
+    this.get(runId);
+    return this.database.orm
+      .select()
+      .from(writingEvaluationFeedback)
+      .where(eq(writingEvaluationFeedback.runId, runId))
+      .all()
+      .map((row) =>
+        WritingEvaluationFeedbackSchema.parse({
+          runId: row.runId,
+          criterionId: row.criterionId,
+          verdict: row.verdict,
+          ...(row.preferredLevel === null
+            ? {}
+            : { preferredLevel: row.preferredLevel }),
+          ...(row.comment === null ? {} : { comment: row.comment }),
+          createdAt: new Date(row.createdAt).toISOString(),
+          updatedAt: new Date(row.updatedAt).toISOString(),
+        }),
+      );
+  }
+
+  saveFeedback(
+    runId: string,
+    criterionId: string,
+    input: WritingEvaluationFeedbackInput,
+  ) {
+    const validated = WritingEvaluationFeedbackInputSchema.parse(input);
+    return this.database.sqlite.transaction(() => {
+      const run = this.get(runId);
+      if (run.status !== "completed") {
+        throw new WritingEvaluationServiceError(
+          "EVALUATION_FEEDBACK_UNAVAILABLE",
+          "Feedback requires a completed evaluation.",
+        );
+      }
+      if (
+        !run.snapshot.rubricSnapshot.criteria.some(
+          (criterion) => criterion.id === criterionId,
+        )
+      ) {
+        throw new WritingEvaluationServiceError(
+          "EVALUATION_CRITERION_NOT_FOUND",
+          "This criterion is not in the evaluated rubric revision.",
+        );
+      }
+      const now = Date.now();
+      const values = {
+        verdict: validated.verdict,
+        preferredLevel: validated.preferredLevel ?? null,
+        comment: validated.comment ?? null,
+        updatedAt: now,
+      };
+      this.database.orm
+        .insert(writingEvaluationFeedback)
+        .values({ runId, criterionId, ...values, createdAt: now })
+        .onConflictDoUpdate({
+          target: [
+            writingEvaluationFeedback.runId,
+            writingEvaluationFeedback.criterionId,
+          ],
+          set: values,
+        })
+        .run();
+      return this.feedback(runId).find(
+        (entry) => entry.criterionId === criterionId,
+      )!;
+    })();
+  }
+
+  export(runId: string) {
+    return this.database.sqlite.transaction(() => {
+      const run = this.get(runId);
+      const row = this.database.orm
+        .select()
+        .from(writingEvaluationRuns)
+        .where(eq(writingEvaluationRuns.id, runId))
+        .get()!;
+      return WritingEvaluationExportSchema.parse({
+        schemaVersion: "writing-evaluation-export.v1",
+        exportedAt: new Date().toISOString(),
+        sourceTextWarning:
+          "Contains the evaluated source text, context, rubric, and author comments.",
+        signalProvenance: {
+          assessment:
+            run.providerId === "mock" ? "mock_fixture" : "model_assessment",
+          feedback: "author_feedback_not_verified_ground_truth",
+        },
+        run,
+        policy: { ...JSON.parse(row.policyJson), version: row.policyVersion },
+        feedback: this.feedback(runId),
+      });
+    })();
   }
 
   cancel(runId: string): WritingEvaluationRun {

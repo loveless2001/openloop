@@ -48,7 +48,7 @@ weights from explicit actions and sustained non-response. Phase 6 adds append-on
 The `packages/model-adapters` boundary owns the provider-neutral model interface, deterministic
 mock implementation, and Ollama/OpenAI-compatible implementation.
 
-Writing-rubric evaluation is a separate J0–J2 feature boundary rather than another original harness
+Writing-rubric evaluation is a separate J0–J3 feature boundary rather than another original harness
 phase. It defines its own `WritingEvaluator` interface beside `ModelAdapter`; J1 provides a
 deterministic fixture-backed mock labeled for UI testing and J2 adds an isolated native TypeSafe
 adapter. The browser captures an exact
@@ -60,9 +60,16 @@ training traces. Remote evaluation requires an explicit reviewed-payload confirm
 non-retried `/v1/systemone` attempt, and cannot fall back to the mock. See
 `docs/JEV-EVALUATION.md` for the current provider and milestone boundary.
 
-The server selects separate completion and critic adapters at startup.
+J3 adds feedback keyed by saved run and criterion, with cascading deletion. Historical inspection
+and versioned JSON export use the immutable run rather than today's rubric. The synthetic pilot
+runner reuses the compiler, evaluator, and display policy without opening the document database;
+its JSONL records keep model assessments and author feedback distinct from verified ground truth.
+
+The server selects separate completion and critic adapters at startup. Autocomplete defaults off
+through `COMPLETION_ENABLED=false`: no completion runtime is warmed, the status reports `disabled`,
+and stream requests return `COMPLETION_DISABLED` before creating a model run.
 `/v1/completions/stream` hashes request context, persists model-run metadata, and emits
-provider-neutral SSE `delta`, `done`, or `error` events. By default, autocomplete calls Ollama's
+provider-neutral SSE `delta`, `done`, or `error` events when enabled. The retained local configuration calls Ollama's
 native `/api/generate` stream with the SmolLM3-3B-Base Q4_K_M artifact, a literal raw prefix,
 greedy decoding, a fixed 2K context, and a configurable keep-alive. It does not apply a chat
 template or instruction wrapper. The critic remains deterministic mock. A

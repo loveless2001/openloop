@@ -575,3 +575,266 @@ describe("writing evaluation queue", () => {
     evaluator.releases.shift()?.();
   });
 });
+
+describe("J3 research workflow", () => {
+  async function setup(
+    evaluator: WritingEvaluator = new MockWritingEvaluator(),
+  ) {
+    const directory = mkdtempSync(join(tmpdir(), "openloop-j3-"));
+    const database = openDatabase(`file:${join(directory, "test.db")}`);
+    const server = buildServer({
+      environment: testEnvironment(join(directory, "test.db")),
+      database,
+      logger: false,
+      criticAgentSupervisor,
+      mcpBearerToken: "test-token",
+      writingEvaluator: evaluator,
+    });
+    cleanups.push(async () => {
+      await server.close();
+      database.sqlite.close();
+      rmSync(directory, { recursive: true, force: true });
+    });
+    await server.ready();
+    const document = await createDocument(server);
+    const rubric = await createRubric(server);
+    const preview = (
+      await server.inject({
+        method: "POST",
+        url: `/v1/documents/${document.id}/evaluations/preview`,
+        payload: intent(document.version, rubric),
+      })
+    ).json() as { inputHash: string };
+    const submit = async () => {
+      const response = await server.inject({
+        method: "POST",
+        url: `/v1/documents/${document.id}/evaluations`,
+        payload: {
+          ...intent(document.version, rubric),
+          requestId: crypto.randomUUID(),
+          expectedInputHash: preview.inputHash,
+          remoteSubmissionConfirmed: false,
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      return response.json() as { id: string };
+    };
+    return { server, database, document, rubric, submit };
+  }
+
+  it("saves author feedback against the old rubric and exports immutable provenance", async () => {
+    const { server, database, rubric, submit } = await setup();
+    const { id } = await submit();
+    const before = await waitForTerminal(server, id);
+    const oldRubric = before.snapshot.rubricSnapshot;
+    const newCriterionId = crypto.randomUUID();
+    const edited = await server.inject({
+      method: "PUT",
+      url: `/v1/writing-rubrics/${rubric.id}`,
+      payload: {
+        ...oldRubric,
+        baseRevision: 1,
+        criteria: [
+          {
+            ...oldRubric.criteria[0],
+            id: newCriterionId,
+            name: "Replaced criterion",
+          },
+        ],
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+    const feedbackUrl = `/v1/evaluations/${id}/feedback/${criterionId}`;
+    const saved = await server.inject({
+      method: "PUT",
+      url: feedbackUrl,
+      payload: {
+        verdict: "disagree",
+        preferredLevel: 0,
+        comment: "The saved text gives no convincing support.",
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    const feedback = saved.json();
+    expect(feedback).toMatchObject({
+      runId: id,
+      criterionId,
+      verdict: "disagree",
+      preferredLevel: 0,
+    });
+    expect(
+      (
+        await server.inject({
+          method: "PUT",
+          url: `/v1/evaluations/${id}/feedback/${newCriterionId}`,
+          payload: { verdict: "agree" },
+        })
+      ).statusCode,
+    ).toBe(404);
+    for (const payload of [
+      { verdict: "invalid" },
+      { verdict: "agree", preferredLevel: 3 },
+      { verdict: "agree", comment: "x".repeat(2001) },
+      { verdict: "agree", train: true },
+    ]) {
+      expect(
+        (await server.inject({ method: "PUT", url: feedbackUrl, payload }))
+          .statusCode,
+      ).toBe(400);
+    }
+    const exported = await server.inject({
+      method: "GET",
+      url: `/v1/evaluations/${id}/export`,
+    });
+    expect(exported.statusCode).toBe(200);
+    expect(exported.headers["content-disposition"]).toContain(
+      `evaluation-${id}.json`,
+    );
+    const record = exported.json();
+    expect(record.run).toEqual(before);
+    expect(record).toMatchObject({
+      schemaVersion: "writing-evaluation-export.v1",
+      signalProvenance: {
+        assessment: "mock_fixture",
+        feedback: "author_feedback_not_verified_ground_truth",
+      },
+      policy: {
+        version: "jev-display.v1",
+        assessabilityThreshold: 0.7,
+        levelThreshold: 0.6,
+      },
+      feedback: [feedback],
+    });
+    expect(record.run.snapshot.rubricSnapshot.revision).toBe(1);
+    expect(record.run.result.criteria[0].score.probabilities).toBeDefined();
+    expect(record.run.compiledRequest).toEqual(before.compiledRequest);
+    expect(record.run.inputHash).toBe(before.inputHash);
+    const replaced = (
+      await server.inject({
+        method: "PUT",
+        url: feedbackUrl,
+        payload: { verdict: "unsure" },
+      })
+    ).json();
+    expect(replaced.createdAt).toBe(feedback.createdAt);
+    expect(replaced).not.toHaveProperty("preferredLevel");
+    expect(replaced).not.toHaveProperty("comment");
+    expect(
+      (
+        await server.inject({
+          method: "GET",
+          url: `/v1/evaluations/${id}/feedback`,
+        })
+      ).json(),
+    ).toEqual({ feedback: [replaced] });
+    expect(
+      database.sqlite
+        .prepare("select count(*) as n from writing_evaluation_feedback")
+        .get(),
+    ).toEqual({ n: 1 });
+    expect(
+      (
+        await server.inject({ method: "GET", url: `/v1/evaluations/${id}` })
+      ).json(),
+    ).toEqual(before);
+    expect(
+      database.sqlite.prepare("select count(*) as n from issues").get(),
+    ).toEqual({ n: 0 });
+    expect(
+      database.sqlite.prepare("select count(*) as n from model_runs").get(),
+    ).toEqual({ n: 0 });
+    await server.inject({ method: "DELETE", url: `/v1/evaluations/${id}` });
+    expect(
+      database.sqlite
+        .prepare("select count(*) as n from writing_evaluation_feedback")
+        .get(),
+    ).toEqual({ n: 0 });
+    expect(
+      (
+        await server.inject({
+          method: "GET",
+          url: `/v1/evaluations/${id}/export`,
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+
+  it("paginates summaries without source text and deletes feedback with local data", async () => {
+    const { server, database, document, submit } = await setup();
+    for (let index = 0; index < 22; index += 1) {
+      const { id } = await submit();
+      await waitForTerminal(server, id);
+      await server.inject({
+        method: "PUT",
+        url: `/v1/evaluations/${id}/feedback/${criterionId}`,
+        payload: { verdict: "agree" },
+      });
+    }
+    const first = (
+      await server.inject({
+        method: "GET",
+        url: `/v1/documents/${document.id}/evaluations?limit=20&offset=0`,
+      })
+    ).json().runs as Array<{ id: string }>;
+    const second = (
+      await server.inject({
+        method: "GET",
+        url: `/v1/documents/${document.id}/evaluations?limit=20&offset=20`,
+      })
+    ).json().runs as Array<{ id: string }>;
+    expect(first).toHaveLength(20);
+    expect(second).toHaveLength(2);
+    expect(new Set([...first, ...second].map((run) => run.id)).size).toBe(22);
+    expect(JSON.stringify(first)).not.toContain("A claim because");
+    expect(first[0]).not.toHaveProperty("snapshot");
+    await server.inject({ method: "DELETE", url: "/v1/local-data" });
+    expect(
+      database.sqlite
+        .prepare("select count(*) as n from writing_evaluation_feedback")
+        .get(),
+    ).toEqual({ n: 0 });
+  });
+
+  it("rejects feedback on unfinished runs and leaves completion disabled", async () => {
+    const { server, database, submit } = await setup({
+      providerId: "mock",
+      evaluate: async () => new Promise(() => {}),
+    });
+    const { id } = await submit();
+    expect(
+      (
+        await server.inject({
+          method: "PUT",
+          url: `/v1/evaluations/${id}/feedback/${criterionId}`,
+          payload: { verdict: "disagree" },
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (await server.inject({ method: "GET", url: "/v1/model-status" })).json()
+        .state,
+    ).toBe("disabled");
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/completions/stream",
+      payload: {},
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("COMPLETION_DISABLED");
+    expect(
+      database.sqlite.prepare("select count(*) as n from model_runs").get(),
+    ).toEqual({ n: 0 });
+    await server.inject({
+      method: "POST",
+      url: `/v1/evaluations/${id}/cancel`,
+    });
+    expect(
+      (
+        await server.inject({
+          method: "GET",
+          url: `/v1/evaluations/${id}/export`,
+        })
+      ).json().run.status,
+    ).toBe("cancelled");
+  });
+});

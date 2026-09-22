@@ -152,6 +152,10 @@ export function App() {
         if (!active) return;
         setModelStatus(status);
         setCompletionReady(status.state === "ready");
+        if (status.state === "disabled") {
+          setModelLabel("Autocomplete off");
+          return;
+        }
         const providerLabel =
           status.mode === "offline"
             ? "Mock · offline"

@@ -1,11 +1,11 @@
 import type {
   EvaluationIntent,
-  WritingCriterion,
-  WritingEvaluationRun,
   WritingLanguageHint,
   WritingRubric,
 } from "@openloop/shared";
 import { useEffect, useRef, useState } from "react";
+
+import { WritingEvaluationResearch } from "./WritingEvaluationResearch.js";
 
 import type { EditorCriticSelection } from "./editor/critic-selection.js";
 import {
@@ -35,89 +35,6 @@ function evaluationTargetKey(target: WritingEvaluationTarget): string {
 
 function statusLabel(status: string): string {
   return status.replaceAll("_", " ");
-}
-
-function CriterionCard(props: {
-  criterion: WritingCriterion;
-  run: WritingEvaluationRun;
-}) {
-  const assessment = props.run.result?.criteria.find(
-    (entry) => entry.criterionId === props.criterion.id,
-  );
-  if (!assessment) return null;
-  const primary =
-    assessment.primaryLevel === undefined
-      ? undefined
-      : props.criterion.levels[assessment.primaryLevel];
-  const headline =
-    assessment.status === "assessed"
-      ? assessment.mixed
-        ? "Mixed assessment"
-        : primary?.label
-      : assessment.status === "needs_context"
-        ? "Cannot assess with this context"
-        : assessment.status === "not_applicable"
-          ? "Not applicable"
-          : assessment.status === "uncertain_assessability"
-            ? "Assessability uncertain"
-            : "Not available for this scope";
-
-  return (
-    <article className="evaluation-criterion-card">
-      <div>
-        <h3>{props.criterion.name}</h3>
-        <strong>{headline}</strong>
-      </div>
-      <p>{props.criterion.question}</p>
-      {primary && !assessment.mixed ? (
-        <p className="saved-level-description">
-          <span>Saved rubric level</span>
-          {primary.description}
-        </p>
-      ) : null}
-      <details>
-        <summary>Details</summary>
-        <ol className="evaluation-levels">
-          {props.criterion.levels.map((level, index) => (
-            <li key={level.label}>
-              <span>
-                <strong>{level.label}</strong>
-                <small>{level.description}</small>
-              </span>
-              <output>
-                {assessment.score?.probabilities[
-                  String(index) as "0" | "1" | "2"
-                ].toFixed(2) ?? "—"}
-              </output>
-            </li>
-          ))}
-        </ol>
-        {assessment.score ? (
-          <p>
-            Scale position {assessment.score.score.toFixed(2)} on the rubric's
-            0–2 scale · provider confidence{" "}
-            {assessment.score.confidence.toFixed(2)}
-            {assessment.status !== "assessed"
-              ? " · score not used for the assessment"
-              : ""}
-          </p>
-        ) : null}
-        {assessment.assessability ? (
-          <p>
-            Assessability: {statusLabel(assessment.assessability.choice)} (
-            {assessment.assessability.probabilities[
-              assessment.assessability.choice
-            ].toFixed(2)}
-            )
-          </p>
-        ) : null}
-        <small>
-          Provider confidence describes the returned distribution; it is not a
-          demonstrated probability that the writing judgment is correct.
-        </small>
-      </details>
-    </article>
-  );
 }
 
 export function WritingEvaluationPanel(props: {
@@ -197,21 +114,6 @@ export function WritingEvaluationPanel(props: {
   useEffect(() => {
     setRemoteConfirmed(false);
   }, [evaluation.prepared?.preview.inputHash]);
-  const result = evaluation.resultRun;
-  const currentRubricRevision = result
-    ? evaluation.rubrics.find(
-        (rubric) => rubric.id === result.snapshot.rubricSnapshot.id,
-      )?.revision
-    : undefined;
-  const draftHistorical = Boolean(
-    result &&
-    (props.draftChanged || result.documentVersion !== props.currentVersion),
-  );
-  const rubricHistorical = Boolean(
-    result &&
-    currentRubricRevision !== undefined &&
-    currentRubricRevision !== result.rubricRevision,
-  );
   const requestedRun = evaluation.run;
   const running =
     requestedRun?.status === "queued" || requestedRun?.status === "running";
@@ -563,43 +465,15 @@ export function WritingEvaluationPanel(props: {
         </section>
       ) : null}
 
-      {result ? (
-        <section className="evaluation-results">
-          <div className="evaluation-result-provenance">
-            <strong>
-              {draftHistorical && rubricHistorical
-                ? "Draft and rubric changed since evaluation"
-                : draftHistorical
-                  ? "Draft changed since evaluation"
-                  : rubricHistorical
-                    ? "Rubric changed"
-                    : "Current snapshot"}
-            </strong>
-            <span>
-              {result.snapshot.scope} · document version{" "}
-              {result.documentVersion} · rubric revision {result.rubricRevision}
-            </span>
-            <span>
-              {new Date(
-                result.completedAt ?? result.updatedAt,
-              ).toLocaleString()}{" "}
-              · {result.providerId} ·{" "}
-              {result.returnedModel ?? result.requestedModel}
-            </span>
-          </div>
-          {result.snapshot.rubricSnapshot.criteria.map((criterion) => (
-            <CriterionCard
-              criterion={criterion}
-              key={criterion.id}
-              run={result}
-            />
-          ))}
-          <details className="historical-snapshot">
-            <summary>Saved target snapshot</summary>
-            <pre>{result.snapshot.targetText}</pre>
-          </details>
-        </section>
-      ) : null}
+      <WritingEvaluationResearch
+        key={props.documentId}
+        documentId={props.documentId}
+        latestRun={requestedRun}
+        resultRun={evaluation.resultRun}
+        rubrics={evaluation.rubrics}
+        currentVersion={props.currentVersion}
+        draftChanged={props.draftChanged}
+      />
     </aside>
   );
 }
